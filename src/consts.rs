@@ -52,11 +52,11 @@ pub const ATTR_FLAG_BIT_WATERMARK: u64 = 1 << 14;
 ///
 /// From the perf-list man page:
 ///
-/// >     0 - SAMPLE_IP can have arbitrary skid
-/// >     1 - SAMPLE_IP must have constant skid
-/// >     2 - SAMPLE_IP requested to have 0 skid
-/// >     3 - SAMPLE_IP must have 0 skid, or uses randomization to avoid
-/// >         sample shadowing effects.
+/// > 0 - SAMPLE_IP can have arbitrary skid
+/// > 1 - SAMPLE_IP must have constant skid
+/// > 2 - SAMPLE_IP requested to have 0 skid
+/// > 3 - SAMPLE_IP must have 0 skid, or uses randomization to avoid
+/// >     sample shadowing effects.
 /// >
 /// > For Intel systems precise event sampling is implemented with PEBS
 /// > which supports up to precise-level 2, and precise level 3 for
@@ -70,9 +70,9 @@ pub const ATTR_FLAG_BIT_WATERMARK: u64 = 1 << 14;
 /// > Architecture Programmer’s Manual Volume 2: System Programming,
 /// > 13.3 Instruction-Based Sampling). Examples to use IBS:
 /// >
-/// >     perf record -a -e cpu-cycles:p ...    # use ibs op counting cycles
-/// >     perf record -a -e r076:p ...          # same as -e cpu-cycles:p
-/// >     perf record -a -e r0C1:p ...          # use ibs op counting micro-ops
+/// > perf record -a -e cpu-cycles:p ...    # use ibs op counting cycles
+/// > perf record -a -e r076:p ...          # same as -e cpu-cycles:p
+/// > perf record -a -e r0C1:p ...          # use ibs op counting micro-ops
 ///
 /// From Brendan Gregg's perf page:
 ///

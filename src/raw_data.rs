@@ -1,17 +1,16 @@
-use std::borrow::Cow;
-use std::cmp::min;
-use std::fmt;
-use std::mem;
-use std::ops::Range;
-
 use crate::utils::HexValue;
 use byteorder::{ByteOrder, NativeEndian};
+use std::borrow::Cow;
+use std::cmp::min;
+use std::ops::Range;
+use std::{fmt, mem};
 
 /// A slice of u8 data that can have non-contiguous backing storage split
 /// into two pieces, and abstracts that split away so that users can pretend
 /// to deal with a contiguous slice.
+///
 /// When reading perf events from the mmap'd fd that contains the perf event
-/// stream, it often happens that a single event straddles the boundary between
+/// stream, it often happens that a single record straddles the boundary between
 /// two mmap chunks, or is wrapped from the end to the start of a chunk.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum RawData<'a> {
@@ -50,9 +49,8 @@ impl<'a> fmt::Debug for RawData<'a> {
 }
 
 impl<'a> RawData<'a> {
-    #[allow(unused)]
     #[inline]
-    pub(crate) fn empty() -> Self {
+    pub fn empty() -> Self {
         RawData::Single(&[])
     }
 
@@ -252,6 +250,13 @@ impl<'a> RawData<'a> {
         })
     }
 
+    pub fn is_empty(&self) -> bool {
+        match *self {
+            RawData::Single(buffer) => buffer.is_empty(),
+            RawData::Split(left, right) => left.is_empty() && right.is_empty(),
+        }
+    }
+
     pub fn len(&self) -> usize {
         match *self {
             RawData::Single(buffer) => buffer.len(),
@@ -261,52 +266,57 @@ impl<'a> RawData<'a> {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub struct RawRegs<'a> {
+pub struct RawDataU64<'a> {
+    swapped_endian: bool,
     raw_data: RawData<'a>,
 }
 
-impl<'a> RawRegs<'a> {
+pub fn is_swapped_endian<T: ByteOrder>() -> bool {
+    let mut buf = [0; 2];
+    T::write_u16(&mut buf, 0x1234);
+    u16::from_ne_bytes(buf) != 0x1234
+}
+
+impl<'a> RawDataU64<'a> {
     #[inline]
-    pub(crate) fn from_raw_data(raw_data: RawData<'a>) -> Self {
-        RawRegs { raw_data }
+    pub fn from_raw_data<T: ByteOrder>(raw_data: RawData<'a>) -> Self {
+        RawDataU64 {
+            raw_data,
+            swapped_endian: is_swapped_endian::<T>(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.raw_data.is_empty()
     }
 
     pub fn len(&self) -> usize {
         self.raw_data.len() / mem::size_of::<u64>()
     }
 
-    // TODO: This should return an Option<u64>
-    pub fn get(&self, index: usize) -> u64 {
+    pub fn get(&self, index: usize) -> Option<u64> {
         let offset = index * mem::size_of::<u64>();
-        match self
-            .raw_data
-            .get(offset..offset + mem::size_of::<u64>())
-            .unwrap()
-        {
-            RawData::Single(single) => NativeEndian::read_u64(single),
-            RawData::Split(left, right) => {
-                let mut buffer = [0; 4];
-                let mut index = 0;
-                for &byte in left {
-                    buffer[index] = byte;
-                    index += 1;
-                }
-                for &byte in right {
-                    buffer[index] = byte;
-                    index += 1;
-                }
-
-                NativeEndian::read_u64(&buffer)
-            }
-        }
+        let mut data = self.raw_data;
+        data.skip(offset).ok()?;
+        let value = data.read_u64::<NativeEndian>().ok()?;
+        Some(if self.swapped_endian {
+            value.swap_bytes()
+        } else {
+            value
+        })
     }
 }
 
-impl<'a> fmt::Debug for RawRegs<'a> {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+impl<'a> std::fmt::Debug for RawDataU64<'a> {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
         let mut list = fmt.debug_list();
-        for index in 0..self.len() {
-            let value = self.get(index);
+        let mut data = self.raw_data;
+        while let Ok(value) = data.read_u64::<NativeEndian>() {
+            let value = if self.swapped_endian {
+                value.swap_bytes()
+            } else {
+                value
+            };
             list.entry(&HexValue(value));
         }
 
