@@ -15,7 +15,7 @@ pub struct PerfEventHeader {
 impl PerfEventHeader {
     pub const STRUCT_SIZE: usize = 4 + 2 + 2;
 
-    pub fn parse<R: Read, T: ByteOrder>(reader: &mut R) -> Result<Self, std::io::Error> {
+    pub fn parse<R: Read, T: ByteOrder>(mut reader: R) -> Result<Self, std::io::Error> {
         let type_ = reader.read_u32::<T>()?;
         let misc = reader.read_u16::<T>()?;
         let size = reader.read_u16::<T>()?;
@@ -135,7 +135,7 @@ pub struct PerfEventAttr {
 
 impl PerfEventAttr {
     pub fn parse<R: Read, T: ByteOrder>(
-        reader: &mut R,
+        mut reader: R,
         size: Option<u32>,
     ) -> Result<Self, std::io::Error> {
         let type_ = reader.read_u32::<T>()?;
