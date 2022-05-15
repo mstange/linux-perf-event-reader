@@ -9,6 +9,10 @@ use crate::{is_swapped_endian, RawData};
 /// It's not clear to me what the point of this list is. It doesn't even give you the
 /// pid of the process that each thread belongs to. And unless you use `perf stat`,
 /// it doesn't seem to have thread names either.
+///
+/// So it seems like all the useful information is instead in the PERF_RECORD_COMM
+/// records which get synthesized at the start of a file for `perf record -p <pid>`.
+/// It seems you're better of just reading those, instead of looking at the thread map.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ThreadMap<'a> {
     swap_endian: bool,
