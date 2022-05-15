@@ -391,8 +391,8 @@ impl<'a> RawRecord<'a> {
         }
     }
 
-    pub fn parse<T: ByteOrder>(
-        self,
+    pub fn to_parsed<T: ByteOrder>(
+        &self,
         parse_info: &RecordParseInfo,
     ) -> Result<ParsedRecord<'a>, std::io::Error> {
         let event = match self.record_type {
@@ -417,7 +417,7 @@ impl<'a> RawRecord<'a> {
                 ParsedRecord::ContextSwitch(ContextSwitchKind::from_misc(self.misc))
             }
             RecordType::THREAD_MAP => ParsedRecord::ThreadMap(ThreadMap::parse::<T>(self.data)?),
-            _ => ParsedRecord::Raw(self),
+            _ => ParsedRecord::Raw(self.clone()),
         };
         Ok(event)
     }
