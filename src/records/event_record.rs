@@ -5,7 +5,7 @@ use crate::utils::HexValue;
 use byteorder::ByteOrder;
 use std::fmt;
 
-use super::{CommonData, RecordParseInfo, SampleRecord};
+use super::{CommonData, RecordParseInfo, SampleRecord, ThreadMap};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(clippy::large_enum_variant)]
@@ -20,6 +20,7 @@ pub enum ParsedRecord<'a> {
     Throttle(ThrottleRecord),
     Unthrottle(ThrottleRecord),
     ContextSwitch(ContextSwitchKind),
+    ThreadMap(ThreadMap<'a>),
     Raw(RawRecord<'a>),
 }
 
@@ -415,6 +416,7 @@ impl<'a> RawRecord<'a> {
             RecordType::SWITCH => {
                 ParsedRecord::ContextSwitch(ContextSwitchKind::from_misc(self.misc))
             }
+            RecordType::THREAD_MAP => ParsedRecord::ThreadMap(ThreadMap::parse::<T>(self.data)?),
             _ => ParsedRecord::Raw(self),
         };
         Ok(event)
