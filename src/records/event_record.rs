@@ -1,8 +1,8 @@
-use crate::consts::*;
 use crate::raw_data::RawData;
 use crate::types::*;
 use crate::utils::HexValue;
-use byteorder::ByteOrder;
+use crate::{consts::*, Endianness};
+use byteorder::{BigEndian, ByteOrder, LittleEndian};
 use std::fmt;
 
 use super::{CommonData, RecordParseInfo, SampleRecord, ThreadMap};
@@ -318,46 +318,60 @@ pub struct RawRecord<'a> {
     pub record_type: RecordType,
     pub misc: u16,
     pub data: RawData<'a>,
+    pub parse_info: RecordParseInfo,
 }
 
 impl<'a> RawRecord<'a> {
-    pub fn new(record_type: RecordType, misc: u16, data: RawData<'a>) -> Self {
+    pub fn new(
+        record_type: RecordType,
+        misc: u16,
+        data: RawData<'a>,
+        parse_info: RecordParseInfo,
+    ) -> Self {
         Self {
             record_type,
             misc,
             data,
+            parse_info,
         }
     }
 
-    pub fn common_data<T: ByteOrder>(
-        &self,
-        parse_info: &RecordParseInfo,
-    ) -> Result<CommonData, std::io::Error> {
+    pub fn common_data(&self) -> Result<CommonData, std::io::Error> {
         if self.record_type.is_user_type() {
             return Ok(Default::default());
         }
 
         if self.record_type == RecordType::SAMPLE {
-            CommonData::parse_sample::<T>(self.data, parse_info)
+            CommonData::parse_sample(self.data, &self.parse_info)
         } else {
-            CommonData::parse_nonsample::<T>(self.data, parse_info)
+            CommonData::parse_nonsample(self.data, &self.parse_info)
         }
     }
 
-    pub fn timestamp<T: ByteOrder>(&self, parse_info: &RecordParseInfo) -> Option<u64> {
+    pub fn timestamp(&self) -> Option<u64> {
+        match self.parse_info.endian {
+            Endianness::LittleEndian => self.timestamp_impl::<LittleEndian>(),
+            Endianness::BigEndian => self.timestamp_impl::<BigEndian>(),
+        }
+    }
+
+    pub fn timestamp_impl<T: ByteOrder>(&self) -> Option<u64> {
         if self.record_type.is_user_type() {
             return None;
         }
 
         if self.record_type == RecordType::SAMPLE {
-            if let Some(time_offset_from_start) = parse_info.sample_record_time_offset_from_start {
+            if let Some(time_offset_from_start) =
+                self.parse_info.sample_record_time_offset_from_start
+            {
                 let mut data = self.data;
                 data.skip(time_offset_from_start).ok()?;
                 data.read_u64::<T>().ok()
             } else {
                 None
             }
-        } else if let Some(time_offset_from_end) = parse_info.nonsample_record_time_offset_from_end
+        } else if let Some(time_offset_from_end) =
+            self.parse_info.nonsample_record_time_offset_from_end
         {
             let mut data = self.data;
             let time_offset_from_start = data.len().checked_sub(time_offset_from_end)?;
@@ -368,20 +382,28 @@ impl<'a> RawRecord<'a> {
         }
     }
 
-    pub fn id<T: ByteOrder>(&self, parse_info: &RecordParseInfo) -> Option<u64> {
+    pub fn id(&self) -> Option<u64> {
+        match self.parse_info.endian {
+            Endianness::LittleEndian => self.id_impl::<LittleEndian>(),
+            Endianness::BigEndian => self.id_impl::<BigEndian>(),
+        }
+    }
+
+    pub fn id_impl<T: ByteOrder>(&self) -> Option<u64> {
         if self.record_type.is_user_type() {
             return None;
         }
 
         if self.record_type == RecordType::SAMPLE {
-            if let Some(id_offset_from_start) = parse_info.sample_record_id_offset_from_start {
+            if let Some(id_offset_from_start) = self.parse_info.sample_record_id_offset_from_start {
                 let mut data = self.data;
                 data.skip(id_offset_from_start).ok()?;
                 data.read_u64::<T>().ok()
             } else {
                 None
             }
-        } else if let Some(id_offset_from_end) = parse_info.nonsample_record_id_offset_from_end {
+        } else if let Some(id_offset_from_end) = self.parse_info.nonsample_record_id_offset_from_end
+        {
             let mut data = self.data;
             let id_offset_from_start = data.len().checked_sub(id_offset_from_end)?;
             data.skip(id_offset_from_start).ok()?;
@@ -391,15 +413,20 @@ impl<'a> RawRecord<'a> {
         }
     }
 
-    pub fn to_parsed<T: ByteOrder>(
-        &self,
-        parse_info: &RecordParseInfo,
-    ) -> Result<ParsedRecord<'a>, std::io::Error> {
+    pub fn parse(&self) -> Result<ParsedRecord<'a>, std::io::Error> {
+        match self.parse_info.endian {
+            Endianness::LittleEndian => self.parse_impl::<LittleEndian>(),
+            Endianness::BigEndian => self.parse_impl::<BigEndian>(),
+        }
+    }
+
+    fn parse_impl<T: ByteOrder>(&self) -> Result<ParsedRecord<'a>, std::io::Error> {
+        let parse_info = &self.parse_info;
         let event = match self.record_type {
             RecordType::FORK => ParsedRecord::Fork(ForkOrExitRecord::parse::<T>(self.data)?),
             RecordType::EXIT => ParsedRecord::Exit(ForkOrExitRecord::parse::<T>(self.data)?),
             RecordType::SAMPLE => {
-                ParsedRecord::Sample(SampleRecord::parse::<T>(self.data, parse_info)?)
+                ParsedRecord::Sample(SampleRecord::parse::<T>(self.data, self.misc, parse_info)?)
             }
             RecordType::COMM => {
                 ParsedRecord::Comm(CommOrExecRecord::parse::<T>(self.data, self.misc)?)

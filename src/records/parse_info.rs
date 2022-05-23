@@ -1,7 +1,8 @@
-use crate::{AttrFlags, BranchSampleFormat, PerfEventAttr, ReadFormat, SampleFormat};
+use crate::{AttrFlags, BranchSampleFormat, Endianness, PerfEventAttr, ReadFormat, SampleFormat};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RecordParseInfo {
+    pub endian: Endianness,
     pub sample_format: SampleFormat,
     pub branch_sample_format: BranchSampleFormat,
     pub read_format: ReadFormat,
@@ -15,7 +16,7 @@ pub struct RecordParseInfo {
 }
 
 impl RecordParseInfo {
-    pub fn from_attr(attr: &PerfEventAttr) -> Self {
+    pub fn new(attr: &PerfEventAttr, endian: Endianness) -> Self {
         let sample_format = attr.sample_format;
         let branch_sample_format = attr.branch_sample_format;
         let read_format = attr.read_format;
@@ -128,6 +129,7 @@ impl RecordParseInfo {
         };
 
         Self {
+            endian,
             sample_format,
             branch_sample_format,
             read_format,

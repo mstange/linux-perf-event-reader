@@ -1,6 +1,6 @@
 use byteorder::ByteOrder;
 
-use crate::{BranchSampleFormat, RawData, RawDataU64, ReadFormat, SampleFormat};
+use crate::{BranchSampleFormat, CpuMode, RawData, RawDataU64, ReadFormat, SampleFormat};
 
 use super::{RecordParseInfo, Regs};
 
@@ -22,11 +22,13 @@ pub struct SampleRecord<'a> {
     pub phys_addr: Option<u64>,
     pub data_page_size: Option<u64>,
     pub code_page_size: Option<u64>,
+    pub cpu_mode: CpuMode,
 }
 
 impl<'a> SampleRecord<'a> {
     pub fn parse<T: ByteOrder>(
         data: RawData<'a>,
+        misc: u16,
         parse_info: &RecordParseInfo,
     ) -> Result<Self, std::io::Error> {
         let sample_format = parse_info.sample_format;
@@ -34,6 +36,7 @@ impl<'a> SampleRecord<'a> {
         let read_format = parse_info.read_format;
         let regs_count = parse_info.regs_count;
         let sample_regs_user = parse_info.sample_regs_user;
+        let cpu_mode = CpuMode::from_misc(misc);
         let mut cur = data;
 
         let identifier = if sample_format.contains(SampleFormat::IDENTIFIER) {
@@ -240,6 +243,7 @@ impl<'a> SampleRecord<'a> {
             phys_addr,
             data_page_size,
             code_page_size,
+            cpu_mode,
         })
     }
 }

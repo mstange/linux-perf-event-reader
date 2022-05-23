@@ -1,6 +1,6 @@
-use byteorder::ByteOrder;
+use byteorder::{BigEndian, ByteOrder, LittleEndian};
 
-use crate::{RawData, SampleFormat};
+use crate::{Endianness, RawData, SampleFormat};
 
 use super::RecordParseInfo;
 
@@ -15,10 +15,20 @@ pub struct CommonData {
 }
 
 impl CommonData {
-    pub fn parse_sample<T: ByteOrder>(
+    pub fn parse_sample(
         data: RawData,
         parse_info: &RecordParseInfo,
-    ) -> Result<CommonData, std::io::Error> {
+    ) -> Result<Self, std::io::Error> {
+        match parse_info.endian {
+            Endianness::LittleEndian => Self::parse_sample_impl::<LittleEndian>(data, parse_info),
+            Endianness::BigEndian => Self::parse_sample_impl::<BigEndian>(data, parse_info),
+        }
+    }
+
+    pub fn parse_sample_impl<T: ByteOrder>(
+        data: RawData,
+        parse_info: &RecordParseInfo,
+    ) -> Result<Self, std::io::Error> {
         let sample_format = parse_info.sample_format;
 
         // { u64 id;       } && PERF_SAMPLE_IDENTIFIER
@@ -89,10 +99,22 @@ impl CommonData {
         })
     }
 
-    pub fn parse_nonsample<T: ByteOrder>(
+    pub fn parse_nonsample(
         data: RawData,
         parse_info: &RecordParseInfo,
-    ) -> Result<CommonData, std::io::Error> {
+    ) -> Result<Self, std::io::Error> {
+        match parse_info.endian {
+            Endianness::LittleEndian => {
+                Self::parse_nonsample_impl::<LittleEndian>(data, parse_info)
+            }
+            Endianness::BigEndian => Self::parse_nonsample_impl::<BigEndian>(data, parse_info),
+        }
+    }
+
+    pub fn parse_nonsample_impl<T: ByteOrder>(
+        data: RawData,
+        parse_info: &RecordParseInfo,
+    ) -> Result<Self, std::io::Error> {
         if let Some(common_data_offset_from_end) = parse_info.common_data_offset_from_end {
             let sample_format = parse_info.sample_format;
 
