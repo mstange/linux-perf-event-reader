@@ -6,13 +6,13 @@ pub struct RecordParseInfo {
     pub sample_format: SampleFormat,
     pub branch_sample_format: BranchSampleFormat,
     pub read_format: ReadFormat,
-    pub common_data_offset_from_end: Option<usize>,
+    pub common_data_offset_from_end: Option<u8>, // 0..=48
     pub sample_regs_user: u64,
-    pub regs_count: usize,
-    pub nonsample_record_time_offset_from_end: Option<usize>,
-    pub nonsample_record_id_offset_from_end: Option<usize>,
-    pub sample_record_time_offset_from_start: Option<usize>,
-    pub sample_record_id_offset_from_start: Option<usize>,
+    pub regs_count: u8,                                    // 0..=64
+    pub nonsample_record_time_offset_from_end: Option<u8>, // 0..=40
+    pub nonsample_record_id_offset_from_end: Option<u8>,   // 0..=32
+    pub sample_record_time_offset_from_start: Option<u8>,  // 0..=32
+    pub sample_record_id_offset_from_start: Option<u8>,    // 0..=24
 }
 
 impl RecordParseInfo {
@@ -41,14 +41,14 @@ impl RecordParseInfo {
                             | SampleFormat::IDENTIFIER,
                     )
                     .bits()
-                    .count_ones() as usize
+                    .count_ones() as u8
                     * 8,
             )
         } else {
             None
         };
         let sample_regs_user = attr.sample_regs_user;
-        let regs_count = sample_regs_user.count_ones() as usize;
+        let regs_count = sample_regs_user.count_ones() as u8;
         let nonsample_record_time_offset_from_end = if attr.flags.contains(AttrFlags::SAMPLE_ID_ALL)
             && sample_format.contains(SampleFormat::TIME)
         {
@@ -62,7 +62,7 @@ impl RecordParseInfo {
                             | SampleFormat::IDENTIFIER,
                     )
                     .bits()
-                    .count_ones() as usize
+                    .count_ones() as u8
                     * 8,
             )
         } else {
@@ -83,7 +83,7 @@ impl RecordParseInfo {
                                 | SampleFormat::IDENTIFIER,
                         )
                         .bits()
-                        .count_ones() as usize
+                        .count_ones() as u8
                         * 8,
                 )
             }
@@ -110,7 +110,7 @@ impl RecordParseInfo {
                             | SampleFormat::ADDR,
                     )
                     .bits()
-                    .count_ones() as usize
+                    .count_ones() as u8
                     * 8,
             )
         } else {
@@ -121,7 +121,7 @@ impl RecordParseInfo {
                 sample_format
                     .intersection(SampleFormat::IDENTIFIER | SampleFormat::IP | SampleFormat::TID)
                     .bits()
-                    .count_ones() as usize
+                    .count_ones() as u8
                     * 8,
             )
         } else {

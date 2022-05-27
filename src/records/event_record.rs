@@ -365,7 +365,7 @@ impl<'a> RawRecord<'a> {
                 self.parse_info.sample_record_time_offset_from_start
             {
                 let mut data = self.data;
-                data.skip(time_offset_from_start).ok()?;
+                data.skip(time_offset_from_start as usize).ok()?;
                 data.read_u64::<T>().ok()
             } else {
                 None
@@ -374,7 +374,7 @@ impl<'a> RawRecord<'a> {
             self.parse_info.nonsample_record_time_offset_from_end
         {
             let mut data = self.data;
-            let time_offset_from_start = data.len().checked_sub(time_offset_from_end)?;
+            let time_offset_from_start = data.len().checked_sub(time_offset_from_end as usize)?;
             data.skip(time_offset_from_start).ok()?;
             data.read_u64::<T>().ok()
         } else {
@@ -397,7 +397,7 @@ impl<'a> RawRecord<'a> {
         if self.record_type == RecordType::SAMPLE {
             if let Some(id_offset_from_start) = self.parse_info.sample_record_id_offset_from_start {
                 let mut data = self.data;
-                data.skip(id_offset_from_start).ok()?;
+                data.skip(id_offset_from_start as usize).ok()?;
                 data.read_u64::<T>().ok()
             } else {
                 None
@@ -405,7 +405,7 @@ impl<'a> RawRecord<'a> {
         } else if let Some(id_offset_from_end) = self.parse_info.nonsample_record_id_offset_from_end
         {
             let mut data = self.data;
-            let id_offset_from_start = data.len().checked_sub(id_offset_from_end)?;
+            let id_offset_from_start = data.len().checked_sub(id_offset_from_end as usize)?;
             data.skip(id_offset_from_start).ok()?;
             data.read_u64::<T>().ok()
         } else {

@@ -161,7 +161,8 @@ impl<'a> SampleRecord<'a> {
             if regs_abi == 0 {
                 None
             } else {
-                let regs_data = cur.split_off_prefix(regs_count * std::mem::size_of::<u64>())?;
+                let regs_data =
+                    cur.split_off_prefix(regs_count as usize * std::mem::size_of::<u64>())?;
                 let raw_regs = RawDataU64::from_raw_data::<T>(regs_data);
                 let user_regs = Regs::new(sample_regs_user, raw_regs);
                 Some(user_regs)
@@ -199,7 +200,7 @@ impl<'a> SampleRecord<'a> {
         if sample_format.contains(SampleFormat::REGS_INTR) {
             let regs_abi = cur.read_u64::<T>()?;
             if regs_abi != 0 {
-                cur.skip(regs_count * std::mem::size_of::<u64>())?;
+                cur.skip(regs_count as usize * std::mem::size_of::<u64>())?;
             }
         }
 

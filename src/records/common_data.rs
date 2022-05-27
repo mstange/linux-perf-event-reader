@@ -116,6 +116,7 @@ impl CommonData {
         parse_info: &RecordParseInfo,
     ) -> Result<Self, std::io::Error> {
         if let Some(common_data_offset_from_end) = parse_info.common_data_offset_from_end {
+            let common_data_offset_from_end = common_data_offset_from_end as usize;
             let sample_format = parse_info.sample_format;
 
             let mut cur = data;
