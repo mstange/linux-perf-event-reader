@@ -1,5 +1,88 @@
 /// Constants from perf_event.h
 
+/// A hardware perf event.
+///
+/// Config format: 0xEEEEEEEE000000AA
+///
+///  - AA: hardware event ID
+///  - EEEEEEEE: PMU type ID
+pub const PERF_TYPE_HARDWARE: u32 = 0;
+
+/// A software perf event.
+///
+/// Special "software" events provided by the kernel, even if the hardware
+/// does not support performance events. These events measure various
+/// physical and sw events of the kernel (and allow the profiling of them as
+/// well).
+pub const PERF_TYPE_SOFTWARE: u32 = 1;
+
+/// A tracepoint perf event.
+pub const PERF_TYPE_TRACEPOINT: u32 = 2;
+
+/// A hardware cache perf event.
+///
+/// The corresponding `attr.config` chooses the cache, the cache op,
+/// and the cache op result.
+///
+/// Config format: 0xEEEEEEEE00DDCCBB
+///
+///  - BB: hardware cache ID
+///  - CC: hardware cache op ID
+///  - DD: hardware cache op result ID
+///  - EEEEEEEE: PMU type ID
+///
+/// ```plain
+/// { L1-D, L1-I, LLC, ITLB, DTLB, BPU, NODE } x
+/// { read, write, prefetch } x
+/// { accesses, misses }
+/// ```
+pub const PERF_TYPE_HW_CACHE: u32 = 3;
+
+/// A raw perf event.
+pub const PERF_TYPE_RAW: u32 = 4;
+
+/// A breakpoint perf event.
+pub const PERF_TYPE_BREAKPOINT: u32 = 5;
+
+pub const PERF_COUNT_HW_CPU_CYCLES: u8 = 0;
+pub const PERF_COUNT_HW_INSTRUCTIONS: u8 = 1;
+pub const PERF_COUNT_HW_CACHE_REFERENCES: u8 = 2;
+pub const PERF_COUNT_HW_CACHE_MISSES: u8 = 3;
+pub const PERF_COUNT_HW_BRANCH_INSTRUCTIONS: u8 = 4;
+pub const PERF_COUNT_HW_BRANCH_MISSES: u8 = 5;
+pub const PERF_COUNT_HW_BUS_CYCLES: u8 = 6;
+pub const PERF_COUNT_HW_STALLED_CYCLES_FRONTEND: u8 = 7;
+pub const PERF_COUNT_HW_STALLED_CYCLES_BACKEND: u8 = 8;
+pub const PERF_COUNT_HW_REF_CPU_CYCLES: u8 = 9;
+
+pub const PERF_COUNT_SW_CPU_CLOCK: u64 = 0;
+pub const PERF_COUNT_SW_TASK_CLOCK: u64 = 1;
+pub const PERF_COUNT_SW_PAGE_FAULTS: u64 = 2;
+pub const PERF_COUNT_SW_CONTEXT_SWITCHES: u64 = 3;
+pub const PERF_COUNT_SW_CPU_MIGRATIONS: u64 = 4;
+pub const PERF_COUNT_SW_PAGE_FAULTS_MIN: u64 = 5;
+pub const PERF_COUNT_SW_PAGE_FAULTS_MAJ: u64 = 6;
+pub const PERF_COUNT_SW_ALIGNMENT_FAULTS: u64 = 7;
+pub const PERF_COUNT_SW_EMULATION_FAULTS: u64 = 8;
+pub const PERF_COUNT_SW_DUMMY: u64 = 9;
+pub const PERF_COUNT_SW_BPF_OUTPUT: u64 = 10;
+pub const PERF_COUNT_SW_CGROUP_SWITCHES: u64 = 11;
+
+pub const PERF_COUNT_HW_CACHE_L1D: u8 = 0;
+pub const PERF_COUNT_HW_CACHE_L1I: u8 = 1;
+pub const PERF_COUNT_HW_CACHE_LL: u8 = 2;
+pub const PERF_COUNT_HW_CACHE_DTLB: u8 = 3;
+pub const PERF_COUNT_HW_CACHE_ITLB: u8 = 4;
+pub const PERF_COUNT_HW_CACHE_BPU: u8 = 5;
+pub const PERF_COUNT_HW_CACHE_NODE: u8 = 6;
+
+pub const PERF_COUNT_HW_CACHE_OP_READ: u8 = 0;
+pub const PERF_COUNT_HW_CACHE_OP_WRITE: u8 = 1;
+pub const PERF_COUNT_HW_CACHE_OP_PREFETCH: u8 = 2;
+
+pub const PERF_COUNT_HW_CACHE_RESULT_ACCESS: u8 = 0;
+pub const PERF_COUNT_HW_CACHE_RESULT_MISS: u8 = 1;
+
 /// sizeof first published struct
 pub const PERF_ATTR_SIZE_VER0: u32 = 64;
 /// add: config2

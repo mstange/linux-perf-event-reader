@@ -26,12 +26,8 @@ impl PerfEventHeader {
 /// `perf_event_attr`
 #[derive(Debug, Clone, Copy)]
 pub struct PerfEventAttr {
-    /// Major type: hardware/software/tracepoint/etc.
-    pub type_: u32,
-    /// Size of the attr structure, for fwd/bwd compat.
-    pub size: u32,
-    /// Type-specific configuration information.
-    pub config: u64,
+    /// The type of the perf event.
+    pub type_: PerfEventType,
 
     /// If AttrFlags::FREQ is set in `flags`, this is the sample frequency,
     /// otherwise it is the sample period.
@@ -68,32 +64,6 @@ pub struct PerfEventAttr {
     /// };
     /// ```
     pub wakeup_events_or_watermark: u32,
-
-    /// breakpoint type
-    pub bp_type: HwBreakpointType,
-
-    /// Union discriminator is ???
-    ///
-    /// ```c
-    /// union {
-    ///     __u64 bp_addr;
-    ///     __u64 kprobe_func; /* for perf_kprobe */
-    ///     __u64 uprobe_path; /* for perf_uprobe */
-    ///     __u64 config1; /* extension of config */
-    /// };
-    /// ```
-    pub bp_addr_or_kprobe_func_or_uprobe_func_or_config1: u64,
-
-    /// Union discriminator is ???
-    ///
-    /// ```c
-    /// union {
-    ///     __u64 bp_len; /* breakpoint length, uses HW_BREAKPOINT_LEN_* constants */
-    ///     __u64 kprobe_addr; /* when kprobe_func == NULL */
-    ///     __u64 probe_offset; /* for perf_[k,u]probe */
-    ///     __u64 config2; /* extension of config1 */
-    /// };
-    pub bp_len_or_kprobe_addr_or_probe_offset_or_config2: u64,
 
     /// Branch-sample specific flags.
     pub branch_sample_format: BranchSampleFormat,
@@ -212,18 +182,23 @@ impl PerfEventAttr {
             io::copy(&mut reader.by_ref().take(remaining.into()), &mut io::sink())?;
         }
 
+        let flags = AttrFlags::from_bits_truncate(flags);
+        let type_ = PerfEventType::parse(
+            type_,
+            bp_type,
+            config,
+            bp_addr_or_kprobe_func_or_uprobe_func_or_config1,
+            bp_len_or_kprobe_addr_or_probe_offset_or_config2,
+        )
+        .ok_or(io::ErrorKind::InvalidInput)?;
+
         Ok(Self {
             type_,
-            size,
-            config,
             sampling_period_or_frequency,
             sample_format: SampleFormat::from_bits_truncate(sample_type),
             read_format: ReadFormat::from_bits_truncate(read_format),
-            flags: AttrFlags::from_bits_truncate(flags),
+            flags,
             wakeup_events_or_watermark,
-            bp_type: HwBreakpointType::from_bits_truncate(bp_type),
-            bp_addr_or_kprobe_func_or_uprobe_func_or_config1,
-            bp_len_or_kprobe_addr_or_probe_offset_or_config2,
             branch_sample_format: BranchSampleFormat::from_bits_truncate(branch_sample_type),
             sample_regs_user,
             sample_stack_user,
@@ -235,4 +210,323 @@ impl PerfEventAttr {
             sig_data,
         })
     }
+}
+
+/// The type of perf event
+#[derive(Debug, Clone, Copy)]
+pub enum PerfEventType {
+    /// A hardware perf event. (`PERF_TYPE_HARDWARE`)
+    Hardware(HardwareEventId, PmuTypeId),
+    /// A software perf event. (`PERF_TYPE_SOFTWARE`)
+    ///
+    /// Special "software" events provided by the kernel, even if the hardware
+    /// does not support performance events. These events measure various
+    /// physical and sw events of the kernel (and allow the profiling of them as
+    /// well).
+    Software(SoftwareCounterType),
+    /// A tracepoint perf event. (`PERF_TYPE_TRACEPOINT`)
+    Tracepoint(u64),
+    /// A hardware cache perf event. (`PERF_TYPE_HW_CACHE`)
+    ///
+    /// Selects a certain combination of CacheId, CacheOp, CacheOpResult, PMU type ID.
+    ///
+    /// ```plain
+    /// { L1-D, L1-I, LLC, ITLB, DTLB, BPU, NODE } x
+    /// { read, write, prefetch } x
+    /// { accesses, misses }
+    /// ```
+    HwCache(
+        HardwareCacheId,
+        HardwareCacheOp,
+        HardwareCacheOpResult,
+        PmuTypeId,
+    ),
+    /// A hardware breakpoint perf event. (`PERF_TYPE_BREAKPOINT`)
+    ///
+    /// Breakpoints can be read/write accesses to an address as well as
+    /// execution of an instruction address.
+    Breakpoint(HwBreakpointType, HwBreakpointAddr, HwBreakpointLen),
+    /// Dynamic PMU
+    ///
+    /// `(pmu, config, config1, config2)`
+    ///
+    /// Acceptable values for each of `config`, `config1` and `config2`
+    /// parameters are defined by corresponding entries in
+    /// `/sys/bus/event_source/devices/<pmu>/format/*`.
+    ///
+    /// From the `perf_event_open` man page:
+    /// > Since Linux 2.6.38, perf_event_open() can support multiple PMUs.  To
+    /// > enable this, a value exported by the kernel can be used in the type
+    /// > field to indicate which PMU to use.  The value to use can be found in
+    /// > the sysfs filesystem: there is a subdirectory per PMU instance under
+    /// > /sys/bus/event_source/devices.  In each subdirectory there is a type
+    /// > file whose content is an integer that can be used in the type field.
+    /// > For instance, /sys/bus/event_source/devices/cpu/type contains the
+    /// > value for the core CPU PMU, which is usually 4.
+    ///
+    /// (I don't fully understand this - the value 4 also means `PERF_TYPE_RAW`.
+    /// Maybe the type `Raw` is just one of those dynamic PMUs, usually "core"?)
+    ///
+    /// Among the "dynamic PMU" values, there are two special values for
+    /// kprobes and uprobes:
+    ///
+    /// > kprobe and uprobe (since Linux 4.17)
+    /// > These two dynamic PMUs create a kprobe/uprobe and attach it to the
+    /// > file descriptor generated by perf_event_open.  The kprobe/uprobe will
+    /// > be destroyed on the destruction of the file descriptor.  See fields
+    /// > kprobe_func, uprobe_path, kprobe_addr, and probe_offset for more details.
+    ///
+    /// ```c
+    /// union {
+    ///     __u64 kprobe_func; /* for perf_kprobe */
+    ///     __u64 uprobe_path; /* for perf_uprobe */
+    ///     __u64 config1; /* extension of config */
+    /// };
+    ///
+    /// union {
+    ///     __u64 kprobe_addr; /* when kprobe_func == NULL */
+    ///     __u64 probe_offset; /* for perf_[k,u]probe */
+    ///     __u64 config2; /* extension of config1 */
+    /// };
+    /// ```
+    DynamicPmu(u32, u64, u64, u64),
+}
+
+/// PMU type ID
+///
+/// The PMU type ID allows selecting whether to observe only "atom", only "core",
+/// or both. If the PMU type ID is zero, both "atom" and "core" are observed.
+/// To observe just one of them, the PMU type ID needs to be set to the value of
+/// `/sys/devices/cpu_atom/type` or of `/sys/devices/cpu_core/type`.
+#[derive(Debug, Clone, Copy)]
+pub struct PmuTypeId(pub u32);
+
+#[derive(Debug, Clone, Copy)]
+pub struct HwBreakpointAddr(pub u64);
+
+/// Uses `HW_BREAKPOINT_LEN_` constants, i.e. 1 through 8.
+#[derive(Debug, Clone, Copy)]
+pub struct HwBreakpointLen(pub u64);
+
+impl PerfEventType {
+    pub fn parse(
+        type_: u32,
+        bp_type: u32,
+        config: u64,
+        config1: u64,
+        config2: u64,
+    ) -> Option<Self> {
+        let t = match type_ {
+            PERF_TYPE_HARDWARE => {
+                // Config format: 0xEEEEEEEE000000AA
+                //
+                //  - AA: hardware event ID
+                //  - EEEEEEEE: PMU type ID
+                let hardware_event_id = (config & 0xff) as u8;
+                let pmu_type = PmuTypeId((config >> 32) as u32);
+                Self::Hardware(HardwareEventId::parse(hardware_event_id)?, pmu_type)
+            }
+            PERF_TYPE_SOFTWARE => Self::Software(SoftwareCounterType::parse(config)?),
+            PERF_TYPE_TRACEPOINT => Self::Tracepoint(config),
+            PERF_TYPE_HW_CACHE => {
+                // Config format: 0xEEEEEEEE00DDCCBB
+                //
+                //  - BB: hardware cache ID
+                //  - CC: hardware cache op ID
+                //  - DD: hardware cache op result ID
+                //  - EEEEEEEE: PMU type ID
+                let cache_id = config as u8;
+                let cache_op_id = (config >> 8) as u8;
+                let cache_op_result = (config >> 16) as u8;
+                let pmu_type = PmuTypeId((config >> 32) as u32);
+                Self::HwCache(
+                    HardwareCacheId::parse(cache_id)?,
+                    HardwareCacheOp::parse(cache_op_id)?,
+                    HardwareCacheOpResult::parse(cache_op_result)?,
+                    pmu_type,
+                )
+            }
+            PERF_TYPE_BREAKPOINT => {
+                let bp_type = HwBreakpointType::from_bits_truncate(bp_type);
+                Self::Breakpoint(bp_type, HwBreakpointAddr(config1), HwBreakpointLen(config2))
+            }
+            _ => Self::DynamicPmu(type_, config, config1, config2),
+            // PERF_TYPE_RAW is handled as part of DynamicPmu.
+        };
+        Some(t)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum HardwareEventId {
+    /// `PERF_COUNT_HW_CPU_CYCLES`
+    CpuCycles,
+    /// `PERF_COUNT_HW_INSTRUCTIONS`
+    Instructions,
+    /// `PERF_COUNT_HW_CACHE_REFERENCES`
+    CacheReferences,
+    /// `PERF_COUNT_HW_CACHE_MISSES`
+    CacheMisses,
+    /// `PERF_COUNT_HW_BRANCH_INSTRUCTIONS`
+    BranchInstructions,
+    /// `PERF_COUNT_HW_BRANCH_MISSES`
+    BranchMisses,
+    /// `PERF_COUNT_HW_BUS_CYCLES`
+    BusCycles,
+    /// `PERF_COUNT_HW_STALLED_CYCLES_FRONTEND`
+    StalledCyclesFrontend,
+    /// `PERF_COUNT_HW_STALLED_CYCLES_BACKEND`
+    StalledCyclesBackend,
+    /// `PERF_COUNT_HW_REF_CPU_CYCLES`
+    RefCpuCycles,
+}
+
+impl HardwareEventId {
+    pub fn parse(hardware_event_id: u8) -> Option<Self> {
+        let t = match hardware_event_id {
+            PERF_COUNT_HW_CPU_CYCLES => Self::CpuCycles,
+            PERF_COUNT_HW_INSTRUCTIONS => Self::Instructions,
+            PERF_COUNT_HW_CACHE_REFERENCES => Self::CacheReferences,
+            PERF_COUNT_HW_CACHE_MISSES => Self::CacheMisses,
+            PERF_COUNT_HW_BRANCH_INSTRUCTIONS => Self::BranchInstructions,
+            PERF_COUNT_HW_BRANCH_MISSES => Self::BranchMisses,
+            PERF_COUNT_HW_BUS_CYCLES => Self::BusCycles,
+            PERF_COUNT_HW_STALLED_CYCLES_FRONTEND => Self::StalledCyclesFrontend,
+            PERF_COUNT_HW_STALLED_CYCLES_BACKEND => Self::StalledCyclesBackend,
+            PERF_COUNT_HW_REF_CPU_CYCLES => Self::RefCpuCycles,
+            _ => return None,
+        };
+        Some(t)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum SoftwareCounterType {
+    /// `PERF_COUNT_SW_CPU_CLOCK`
+    CpuClock,
+    /// `PERF_COUNT_SW_TASK_CLOCK`
+    TaskClock,
+    /// `PERF_COUNT_SW_PAGE_FAULTS`
+    PageFaults,
+    /// `PERF_COUNT_SW_CONTEXT_SWITCHES`
+    ContextSwitches,
+    /// `PERF_COUNT_SW_CPU_MIGRATIONS`
+    CpuMigrations,
+    /// `PERF_COUNT_SW_PAGE_FAULTS_MIN`
+    PageFaultsMin,
+    /// `PERF_COUNT_SW_PAGE_FAULTS_MAJ`
+    PageFaultsMaj,
+    /// `PERF_COUNT_SW_ALIGNMENT_FAULTS`
+    AlignmentFaults,
+    /// `PERF_COUNT_SW_EMULATION_FAULTS`
+    EmulationFaults,
+    /// `PERF_COUNT_SW_DUMMY`
+    Dummy,
+    /// `PERF_COUNT_SW_BPF_OUTPUT`
+    BpfOutput,
+    /// `PERF_COUNT_SW_CGROUP_SWITCHES`
+    CgroupSwitches,
+}
+
+impl SoftwareCounterType {
+    pub fn parse(config: u64) -> Option<Self> {
+        let t = match config {
+            PERF_COUNT_SW_CPU_CLOCK => Self::CpuClock,
+            PERF_COUNT_SW_TASK_CLOCK => Self::TaskClock,
+            PERF_COUNT_SW_PAGE_FAULTS => Self::PageFaults,
+            PERF_COUNT_SW_CONTEXT_SWITCHES => Self::ContextSwitches,
+            PERF_COUNT_SW_CPU_MIGRATIONS => Self::CpuMigrations,
+            PERF_COUNT_SW_PAGE_FAULTS_MIN => Self::PageFaultsMin,
+            PERF_COUNT_SW_PAGE_FAULTS_MAJ => Self::PageFaultsMaj,
+            PERF_COUNT_SW_ALIGNMENT_FAULTS => Self::AlignmentFaults,
+            PERF_COUNT_SW_EMULATION_FAULTS => Self::EmulationFaults,
+            PERF_COUNT_SW_DUMMY => Self::Dummy,
+            PERF_COUNT_SW_BPF_OUTPUT => Self::BpfOutput,
+            PERF_COUNT_SW_CGROUP_SWITCHES => Self::CgroupSwitches,
+            _ => return None,
+        };
+        Some(t)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum HardwareCacheId {
+    /// `PERF_COUNT_HW_CACHE_L1D`
+    L1d,
+    /// `PERF_COUNT_HW_CACHE_L1I`
+    L1i,
+    /// `PERF_COUNT_HW_CACHE_LL`
+    Ll,
+    /// `PERF_COUNT_HW_CACHE_DTLB`
+    Dtlb,
+    /// `PERF_COUNT_HW_CACHE_ITLB`
+    Itlb,
+    /// `PERF_COUNT_HW_CACHE_BPU`
+    Bpu,
+    /// `PERF_COUNT_HW_CACHE_NODE`
+    Node,
+}
+
+impl HardwareCacheId {
+    pub fn parse(cache_id: u8) -> Option<Self> {
+        let rv = match cache_id {
+            PERF_COUNT_HW_CACHE_L1D => Self::L1d,
+            PERF_COUNT_HW_CACHE_L1I => Self::L1i,
+            PERF_COUNT_HW_CACHE_LL => Self::Ll,
+            PERF_COUNT_HW_CACHE_DTLB => Self::Dtlb,
+            PERF_COUNT_HW_CACHE_ITLB => Self::Itlb,
+            PERF_COUNT_HW_CACHE_BPU => Self::Bpu,
+            PERF_COUNT_HW_CACHE_NODE => Self::Node,
+            _ => return None,
+        };
+        Some(rv)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum HardwareCacheOp {
+    /// `PERF_COUNT_HW_CACHE_OP_READ`
+    Read,
+    /// `PERF_COUNT_HW_CACHE_OP_WRITE`
+    Write,
+    /// `PERF_COUNT_HW_CACHE_OP_PREFETCH`
+    Prefetch,
+}
+
+impl HardwareCacheOp {
+    pub fn parse(cache_op: u8) -> Option<Self> {
+        match cache_op {
+            PERF_COUNT_HW_CACHE_OP_READ => Some(Self::Read),
+            PERF_COUNT_HW_CACHE_OP_WRITE => Some(Self::Write),
+            PERF_COUNT_HW_CACHE_OP_PREFETCH => Some(Self::Prefetch),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum HardwareCacheOpResult {
+    /// `PERF_COUNT_HW_CACHE_RESULT_ACCESS`
+    Access,
+    /// `PERF_COUNT_HW_CACHE_RESULT_MISS`
+    Miss,
+}
+
+impl HardwareCacheOpResult {
+    pub fn parse(cache_op_result: u8) -> Option<Self> {
+        match cache_op_result {
+            PERF_COUNT_HW_CACHE_RESULT_ACCESS => Some(Self::Access),
+            PERF_COUNT_HW_CACHE_RESULT_MISS => Some(Self::Miss),
+            _ => None,
+        }
+    }
+}
+
+/// Sample Policy
+#[derive(Debug, Clone, Copy)]
+pub enum SamplePolicy {
+    /// Period
+    Period(u64),
+    /// Frequency
+    Frequency(u64),
 }
