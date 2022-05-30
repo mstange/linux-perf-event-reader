@@ -83,6 +83,13 @@ pub const PERF_COUNT_HW_CACHE_OP_PREFETCH: u8 = 2;
 pub const PERF_COUNT_HW_CACHE_RESULT_ACCESS: u8 = 0;
 pub const PERF_COUNT_HW_CACHE_RESULT_MISS: u8 = 1;
 
+pub const HW_BREAKPOINT_EMPTY: u8 = 0;
+pub const HW_BREAKPOINT_R: u8 = 1;
+pub const HW_BREAKPOINT_W: u8 = 2;
+pub const HW_BREAKPOINT_RW: u8 = HW_BREAKPOINT_R | HW_BREAKPOINT_W;
+pub const HW_BREAKPOINT_X: u8 = 4;
+pub const HW_BREAKPOINT_INVALID: u8 = HW_BREAKPOINT_RW | HW_BREAKPOINT_X;
+
 /// sizeof first published struct
 pub const PERF_ATTR_SIZE_VER0: u32 = 64;
 /// add: config2

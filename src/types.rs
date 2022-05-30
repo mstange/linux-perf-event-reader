@@ -151,11 +151,18 @@ bitflags! {
     }
 
     pub struct HwBreakpointType: u32 {
+        /// No breakpoint. (`HW_BREAKPOINT_EMPTY`)
         const EMPTY = 0;
+        /// Count when we read the memory location. (`HW_BREAKPOINT_R`)
         const R = 1;
+        /// Count when we write the memory location. (`HW_BREAKPOINT_W`)
         const W = 2;
+        /// Count when we read or write the memory location. (`HW_BREAKPOINT_RW`)
         const RW = Self::R.bits | Self::W.bits;
+        /// Count when we execute code at the memory location. (`HW_BREAKPOINT_X`)
         const X = 4;
+        /// The combination of `HW_BREAKPOINT_R` or `HW_BREAKPOINT_W` with
+        //// `HW_BREAKPOINT_X` is not allowed. (`HW_BREAKPOINT_INVALID`)
         const INVALID = Self::RW.bits | Self::X.bits;
     }
 

@@ -3,6 +3,7 @@ use crate::types::*;
 use byteorder::{ByteOrder, ReadBytesExt};
 use std::io;
 use std::io::Read;
+use std::num::NonZeroU64;
 
 /// `perf_event_header`
 #[derive(Debug, Clone, Copy)]
@@ -29,18 +30,8 @@ pub struct PerfEventAttr {
     /// The type of the perf event.
     pub type_: PerfEventType,
 
-    /// If AttrFlags::FREQ is set in `flags`, this is the sample frequency,
-    /// otherwise it is the sample period.
-    ///
-    /// ```c
-    /// union {
-    ///     /// Period of sampling
-    ///     __u64 sample_period;
-    ///     /// Frequency of sampling
-    ///     __u64 sample_freq;
-    /// };
-    /// ```
-    pub sampling_period_or_frequency: u64,
+    /// The sampling policy.
+    pub sampling_policy: SamplingPolicy,
 
     /// Specifies values included in sample. (original name `sample_type`)
     pub sample_format: SampleFormat,
@@ -52,18 +43,8 @@ pub struct PerfEventAttr {
     /// Bitset of flags.
     pub flags: AttrFlags,
 
-    /// If AttrFlags::WATERMARK is set in `flags`, this is the watermark,
-    /// otherwise it is the event count after which to wake up.
-    ///
-    /// ```c
-    /// union {
-    ///     /// wakeup every n events
-    ///     __u32 wakeup_events;
-    ///     /// bytes before wakeup
-    ///     __u32 wakeup_watermark;
-    /// };
-    /// ```
-    pub wakeup_events_or_watermark: u32,
+    /// The wake-up policy.
+    pub wakeup_policy: WakeupPolicy,
 
     /// Branch-sample specific flags.
     pub branch_sample_format: BranchSampleFormat,
@@ -76,7 +57,7 @@ pub struct PerfEventAttr {
     pub sample_stack_user: u32,
 
     /// The clock ID.
-    pub clockid: ClockId,
+    pub clock: PerfClock,
 
     /// Defines set of regs to dump for each sample
     /// state captured on:
@@ -192,17 +173,49 @@ impl PerfEventAttr {
         )
         .ok_or(io::ErrorKind::InvalidInput)?;
 
+        // If AttrFlags::FREQ is set in `flags`, this is the sample frequency,
+        // otherwise it is the sample period.
+        //
+        // ```c
+        // union {
+        //     /// Period of sampling
+        //     __u64 sample_period;
+        //     /// Frequency of sampling
+        //     __u64 sample_freq;
+        // };
+        // ```
+        let sampling_policy = if flags.contains(AttrFlags::FREQ) {
+            SamplingPolicy::Frequency(sampling_period_or_frequency)
+        } else if let Some(period) = NonZeroU64::new(sampling_period_or_frequency) {
+            SamplingPolicy::Period(period)
+        } else {
+            SamplingPolicy::NoSampling
+        };
+
+        let wakeup_policy = if flags.contains(AttrFlags::WATERMARK) {
+            WakeupPolicy::Watermark(wakeup_events_or_watermark)
+        } else {
+            WakeupPolicy::EventCount(wakeup_events_or_watermark)
+        };
+
+        let clock = if flags.contains(AttrFlags::USE_CLOCKID) {
+            let clockid = ClockId::from_u32(clockid).ok_or(io::ErrorKind::InvalidInput)?;
+            PerfClock::ClockId(clockid)
+        } else {
+            PerfClock::Default
+        };
+
         Ok(Self {
             type_,
-            sampling_period_or_frequency,
+            sampling_policy,
             sample_format: SampleFormat::from_bits_truncate(sample_type),
             read_format: ReadFormat::from_bits_truncate(read_format),
             flags,
-            wakeup_events_or_watermark,
+            wakeup_policy,
             branch_sample_format: BranchSampleFormat::from_bits_truncate(branch_sample_type),
             sample_regs_user,
             sample_stack_user,
-            clockid: ClockId::from_u32(clockid).ok_or(io::ErrorKind::InvalidInput)?,
+            clock,
             sample_regs_intr,
             aux_watermark,
             sample_max_stack,
@@ -301,10 +314,19 @@ pub enum PerfEventType {
 #[derive(Debug, Clone, Copy)]
 pub struct PmuTypeId(pub u32);
 
+/// The address of the breakpoint.
+///
+/// For execution breakpoints, this is the memory address of the instruction
+/// of interest; for read and write breakpoints, it is the memory address of
+/// the memory location of interest.
 #[derive(Debug, Clone, Copy)]
 pub struct HwBreakpointAddr(pub u64);
 
-/// Uses `HW_BREAKPOINT_LEN_` constants, i.e. 1 through 8.
+/// The length of the breakpoint being measured.
+///
+/// Options are `HW_BREAKPOINT_LEN_1`, `HW_BREAKPOINT_LEN_2`,
+/// `HW_BREAKPOINT_LEN_4`, and `HW_BREAKPOINT_LEN_8`.  For an
+/// execution breakpoint, set this to sizeof(long).
 #[derive(Debug, Clone, Copy)]
 pub struct HwBreakpointLen(pub u64);
 
@@ -522,11 +544,82 @@ impl HardwareCacheOpResult {
     }
 }
 
-/// Sample Policy
+/// Sampling Policy
+///
+/// > Events can be set to notify when a threshold is crossed,
+/// > indicating an overflow. [...]
+/// >
+/// > Overflows are generated only by sampling events (sample_period
+/// > must have a nonzero value).
 #[derive(Debug, Clone, Copy)]
-pub enum SamplePolicy {
-    /// Period
-    Period(u64),
-    /// Frequency
+pub enum SamplingPolicy {
+    /// `NoSampling` means that the event is a count and not a sampling event.
+    NoSampling,
+    /// Sets a fixed sampling period for a sampling event, in the unit of the
+    /// observed count / event.
+    ///
+    /// A "sampling" event is one that generates an overflow notification every
+    /// N events, where N is given by the sampling period. A sampling event has
+    /// a sampling period greater than zero.
+    ///
+    /// When an overflow occurs, requested data is recorded in the mmap buffer.
+    /// The `SampleFormat` bitfield controls what data is recorded on each overflow.
+    Period(NonZeroU64),
+    /// Sets a frequency for a sampling event, in "samples per (wall-clock) second".
+    ///
+    /// This uses a dynamic period which is adjusted by the kernel to hit the
+    /// desired frequency. The rate of adjustment is a timer tick.
+    ///
+    /// If `SampleFormat::PERIOD` is requested, the current period at the time of
+    /// the sample is stored in the sample.
     Frequency(u64),
+}
+
+/// Wakeup policy for "overflow notifications". This controls the point at
+/// which the `read` call completes. (TODO: double check this)
+///
+/// > There are two ways to generate overflow notifications.
+/// >
+/// > The first is to set a `WakeupPolicy`
+/// > that will trigger if a certain number of samples or bytes have
+/// > been written to the mmap ring buffer.
+/// >
+/// > The other way is by use of the PERF_EVENT_IOC_REFRESH ioctl.
+/// > This ioctl adds to a counter that decrements each time the event
+/// > overflows.  When nonzero, POLLIN is indicated, but once the
+/// > counter reaches 0 POLLHUP is indicated and the underlying event
+/// > is disabled.
+#[derive(Debug, Clone, Copy)]
+pub enum WakeupPolicy {
+    /// Wake up every time N records of type `RecordType::SAMPLE` have been
+    /// written to the mmap ring buffer.
+    EventCount(u32),
+    /// Wake up after N bytes of any record type have been written to the mmap
+    /// ring buffer.
+    ///
+    /// To receive a wakeup after every single record, choose `Watermark(1)`.
+    /// `Watermark(0)` is treated the same as `Watermark(1)`.
+    Watermark(u32),
+}
+
+/// This allows selecting which internal Linux clock to use when generating
+/// timestamps.
+///
+/// Setting a specific ClockId can make it easier to correlate perf sample
+/// times with timestamps generated by other tools. For example, when sampling
+/// applications which emit JITDUMP information, you'll usually select the
+/// moonotonic clock. This makes it possible to correctly order perf event
+/// records and JITDUMP records - those also usually use the monotonic clock.
+#[derive(Debug, Clone, Copy)]
+pub enum PerfClock {
+    /// The default clock. If this is used, the timestamps in event records
+    /// are obtained with `local_clock()` which is a hardware timestamp if
+    /// available and the jiffies value if not.
+    ///
+    /// In practice, on x86_64 this seems to use ktime_get_ns() which is the
+    /// number of nanoseconds since boot.
+    Default,
+
+    /// A specific clock.
+    ClockId(ClockId),
 }
