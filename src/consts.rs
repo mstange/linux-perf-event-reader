@@ -866,6 +866,8 @@ pub const PERF_RECORD_MISC_SWITCH_OUT: u16 = 1 << 13;
 pub const PERF_RECORD_MISC_EXACT_IP: u16 = 1 << 14;
 /// Indicates that thread was preempted in TASK_RUNNING state.
 /// Used on PERF_RECORD_SWITCH* events.
+///
+/// This helps understanding whether a workload is CPU or IO bound.
 pub const PERF_RECORD_MISC_SWITCH_OUT_PREEMPT: u16 = 1 << 14;
 /// Indicates that mmap2 event carries build id data.
 /// Used on PERF_RECORD_MMAP2 events.

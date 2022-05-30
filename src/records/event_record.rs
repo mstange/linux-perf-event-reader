@@ -19,7 +19,7 @@ pub enum ParsedRecord<'a> {
     Lost(LostRecord),
     Throttle(ThrottleRecord),
     Unthrottle(ThrottleRecord),
-    ContextSwitch(ContextSwitchKind),
+    ContextSwitch(ContextSwitchRecord),
     ThreadMap(ThreadMap<'a>),
     Raw(RawRecord<'a>),
 }
@@ -295,22 +295,63 @@ impl ThrottleRecord {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ContextSwitchKind {
-    In,
-    OutWhileIdle,
-    OutWhileRunning,
+pub enum ContextSwitchRecord {
+    In {
+        prev_pid: Option<i32>,
+        prev_tid: Option<i32>,
+    },
+    Out {
+        next_pid: Option<i32>,
+        next_tid: Option<i32>,
+        preempted: TaskWasPreempted,
+    },
 }
 
-impl ContextSwitchKind {
+impl ContextSwitchRecord {
     pub fn from_misc(misc: u16) -> Self {
+        Self::from_misc_pid_tid(misc, None, None)
+    }
+
+    pub fn parse_cpu_wide<T: ByteOrder>(data: RawData, misc: u16) -> Result<Self, std::io::Error> {
+        let mut cur = data;
+
+        let pid = cur.read_i32::<T>()?;
+        let tid = cur.read_i32::<T>()?;
+        Ok(Self::from_misc_pid_tid(misc, Some(pid), Some(tid)))
+    }
+
+    pub fn from_misc_pid_tid(misc: u16, pid: Option<i32>, tid: Option<i32>) -> Self {
         let is_out = misc & PERF_RECORD_MISC_SWITCH_OUT != 0;
-        let is_out_preempt = misc & PERF_RECORD_MISC_SWITCH_OUT_PREEMPT != 0;
-        match (is_out, is_out_preempt) {
-            (true, true) => ContextSwitchKind::OutWhileRunning,
-            (true, false) => ContextSwitchKind::OutWhileIdle,
-            (false, _) => ContextSwitchKind::In,
+        if is_out {
+            let is_out_preempt = misc & PERF_RECORD_MISC_SWITCH_OUT_PREEMPT != 0;
+            ContextSwitchRecord::Out {
+                next_pid: pid,
+                next_tid: tid,
+                preempted: if is_out_preempt {
+                    TaskWasPreempted::Yes
+                } else {
+                    TaskWasPreempted::No
+                },
+            }
+        } else {
+            ContextSwitchRecord::In {
+                prev_pid: pid,
+                prev_tid: tid,
+            }
         }
     }
+}
+
+/// Whether a task was in the `TASK_RUNNING` state when it was switched
+/// away from.
+///
+/// This helps understanding whether a workload is CPU or IO bound.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TaskWasPreempted {
+    /// When switching out, the task was in the `TASK_RUNNING` state.
+    Yes,
+    /// When switching out, the task was in a non-running state.
+    No,
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -423,27 +464,61 @@ impl<'a> RawRecord<'a> {
     fn parse_impl<T: ByteOrder>(&self) -> Result<ParsedRecord<'a>, std::io::Error> {
         let parse_info = &self.parse_info;
         let event = match self.record_type {
-            RecordType::FORK => ParsedRecord::Fork(ForkOrExitRecord::parse::<T>(self.data)?),
-            RecordType::EXIT => ParsedRecord::Exit(ForkOrExitRecord::parse::<T>(self.data)?),
-            RecordType::SAMPLE => {
-                ParsedRecord::Sample(SampleRecord::parse::<T>(self.data, self.misc, parse_info)?)
-            }
+            // Kernel built-in record types
+            RecordType::MMAP => ParsedRecord::Mmap(MmapRecord::parse::<T>(self.data, self.misc)?),
+            RecordType::LOST => ParsedRecord::Lost(LostRecord::parse::<T>(self.data)?),
             RecordType::COMM => {
                 ParsedRecord::Comm(CommOrExecRecord::parse::<T>(self.data, self.misc)?)
             }
-            RecordType::MMAP => ParsedRecord::Mmap(MmapRecord::parse::<T>(self.data, self.misc)?),
-            RecordType::MMAP2 => {
-                ParsedRecord::Mmap2(Mmap2Record::parse::<T>(self.data, self.misc)?)
-            }
-            RecordType::LOST => ParsedRecord::Lost(LostRecord::parse::<T>(self.data)?),
+            RecordType::EXIT => ParsedRecord::Exit(ForkOrExitRecord::parse::<T>(self.data)?),
             RecordType::THROTTLE => ParsedRecord::Throttle(ThrottleRecord::parse::<T>(self.data)?),
             RecordType::UNTHROTTLE => {
                 ParsedRecord::Unthrottle(ThrottleRecord::parse::<T>(self.data)?)
             }
-            RecordType::SWITCH => {
-                ParsedRecord::ContextSwitch(ContextSwitchKind::from_misc(self.misc))
+            RecordType::FORK => ParsedRecord::Fork(ForkOrExitRecord::parse::<T>(self.data)?),
+            // READ
+            RecordType::SAMPLE => {
+                ParsedRecord::Sample(SampleRecord::parse::<T>(self.data, self.misc, parse_info)?)
             }
+            RecordType::MMAP2 => {
+                ParsedRecord::Mmap2(Mmap2Record::parse::<T>(self.data, self.misc)?)
+            }
+            // AUX
+            // ITRACE_START
+            // LOST_SAMPLES
+            RecordType::SWITCH => {
+                ParsedRecord::ContextSwitch(ContextSwitchRecord::from_misc(self.misc))
+            }
+            RecordType::SWITCH_CPU_WIDE => ParsedRecord::ContextSwitch(
+                ContextSwitchRecord::parse_cpu_wide::<T>(self.data, self.misc)?,
+            ),
+            // NAMESPACES
+            // KSYMBOL
+            // BPF_EVENT
+            // CGROUP
+            // TEXT_POKE
+            // AUX_OUTPUT_HW_ID
+
+            // Record types added by the `perf` tool from user space
+
+            // HEADER_ATTR
+            // HEADER_EVENT_TYPE
+            // HEADER_TRACING_DATA
+            // HEADER_BUILD_ID
+            // FINISHED_ROUND
+            // ID_INDEX
+            // AUXTRACE_INFO
+            // AUXTRACE
+            // AUXTRACE_ERROR
             RecordType::THREAD_MAP => ParsedRecord::ThreadMap(ThreadMap::parse::<T>(self.data)?),
+            // CPU_MAP
+            // STAT_CONFIG
+            // STAT
+            // STAT_ROUND
+            // EVENT_UPDATE
+            // TIME_CONV
+            // HEADER_FEATURE
+            // COMPRESSED
             _ => ParsedRecord::Raw(self.clone()),
         };
         Ok(event)
