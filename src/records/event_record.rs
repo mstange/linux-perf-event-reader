@@ -5,7 +5,9 @@ use crate::{consts::*, Endianness};
 use byteorder::{BigEndian, ByteOrder, LittleEndian};
 use std::fmt;
 
-use super::{CommonData, RecordParseInfo, SampleRecord, ThreadMap};
+use super::{
+    get_record_id, get_record_timestamp, CommonData, RecordParseInfo, SampleRecord, ThreadMap,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(clippy::large_enum_variant)]
@@ -397,30 +399,7 @@ impl<'a> RawRecord<'a> {
     }
 
     pub fn timestamp_impl<T: ByteOrder>(&self) -> Option<u64> {
-        if self.record_type.is_user_type() {
-            return None;
-        }
-
-        if self.record_type == RecordType::SAMPLE {
-            if let Some(time_offset_from_start) =
-                self.parse_info.sample_record_time_offset_from_start
-            {
-                let mut data = self.data;
-                data.skip(time_offset_from_start as usize).ok()?;
-                data.read_u64::<T>().ok()
-            } else {
-                None
-            }
-        } else if let Some(time_offset_from_end) =
-            self.parse_info.nonsample_record_time_offset_from_end
-        {
-            let mut data = self.data;
-            let time_offset_from_start = data.len().checked_sub(time_offset_from_end as usize)?;
-            data.skip(time_offset_from_start).ok()?;
-            data.read_u64::<T>().ok()
-        } else {
-            None
-        }
+        get_record_timestamp::<T>(self.record_type, self.data, &self.parse_info)
     }
 
     pub fn id(&self) -> Option<u64> {
@@ -431,27 +410,7 @@ impl<'a> RawRecord<'a> {
     }
 
     pub fn id_impl<T: ByteOrder>(&self) -> Option<u64> {
-        if self.record_type.is_user_type() {
-            return None;
-        }
-
-        if self.record_type == RecordType::SAMPLE {
-            if let Some(id_offset_from_start) = self.parse_info.sample_record_id_offset_from_start {
-                let mut data = self.data;
-                data.skip(id_offset_from_start as usize).ok()?;
-                data.read_u64::<T>().ok()
-            } else {
-                None
-            }
-        } else if let Some(id_offset_from_end) = self.parse_info.nonsample_record_id_offset_from_end
-        {
-            let mut data = self.data;
-            let id_offset_from_start = data.len().checked_sub(id_offset_from_end as usize)?;
-            data.skip(id_offset_from_start).ok()?;
-            data.read_u64::<T>().ok()
-        } else {
-            None
-        }
+        get_record_id::<T>(self.record_type, self.data, &self.parse_info.id_parse_info)
     }
 
     pub fn parse(&self) -> Result<ParsedRecord<'a>, std::io::Error> {

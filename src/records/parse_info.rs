@@ -8,11 +8,16 @@ pub struct RecordParseInfo {
     pub read_format: ReadFormat,
     pub common_data_offset_from_end: Option<u8>, // 0..=48
     pub sample_regs_user: u64,
-    pub regs_count: u8,                                    // 0..=64
+    pub regs_count: u8, // 0..=64
+    pub id_parse_info: RecordIdParseInfo,
     pub nonsample_record_time_offset_from_end: Option<u8>, // 0..=40
-    pub nonsample_record_id_offset_from_end: Option<u8>,   // 0..=32
     pub sample_record_time_offset_from_start: Option<u8>,  // 0..=32
-    pub sample_record_id_offset_from_start: Option<u8>,    // 0..=24
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RecordIdParseInfo {
+    pub nonsample_record_id_offset_from_end: Option<u8>, // 0..=32
+    pub sample_record_id_offset_from_start: Option<u8>,  // 0..=24
 }
 
 impl RecordParseInfo {
@@ -68,6 +73,43 @@ impl RecordParseInfo {
         } else {
             None
         };
+
+        // { u64 id;           } && PERF_SAMPLE_IDENTIFIER
+        // { u64 ip;           } && PERF_SAMPLE_IP
+        // { u32 pid; u32 tid; } && PERF_SAMPLE_TID
+        // { u64 time;         } && PERF_SAMPLE_TIME
+        // { u64 addr;         } && PERF_SAMPLE_ADDR
+        // { u64 id;           } && PERF_SAMPLE_ID
+        let sample_record_time_offset_from_start = if sample_format.contains(SampleFormat::TIME) {
+            Some(
+                sample_format
+                    .intersection(SampleFormat::IDENTIFIER | SampleFormat::IP | SampleFormat::TID)
+                    .bits()
+                    .count_ones() as u8
+                    * 8,
+            )
+        } else {
+            None
+        };
+
+        Self {
+            endian,
+            sample_format,
+            branch_sample_format,
+            read_format,
+            common_data_offset_from_end,
+            sample_regs_user,
+            regs_count,
+            nonsample_record_time_offset_from_end,
+            sample_record_time_offset_from_start,
+            id_parse_info: RecordIdParseInfo::new(attr),
+        }
+    }
+}
+
+impl RecordIdParseInfo {
+    pub fn new(attr: &PerfEventAttr) -> Self {
+        let sample_format = attr.sample_format;
         let nonsample_record_id_offset_from_end = if attr.flags.contains(AttrFlags::SAMPLE_ID_ALL)
             && sample_format.intersects(SampleFormat::ID | SampleFormat::IDENTIFIER)
         {
@@ -116,29 +158,9 @@ impl RecordParseInfo {
         } else {
             None
         };
-        let sample_record_time_offset_from_start = if sample_format.contains(SampleFormat::TIME) {
-            Some(
-                sample_format
-                    .intersection(SampleFormat::IDENTIFIER | SampleFormat::IP | SampleFormat::TID)
-                    .bits()
-                    .count_ones() as u8
-                    * 8,
-            )
-        } else {
-            None
-        };
 
         Self {
-            endian,
-            sample_format,
-            branch_sample_format,
-            read_format,
-            common_data_offset_from_end,
-            sample_regs_user,
-            regs_count,
-            nonsample_record_time_offset_from_end,
             nonsample_record_id_offset_from_end,
-            sample_record_time_offset_from_start,
             sample_record_id_offset_from_start,
         }
     }
