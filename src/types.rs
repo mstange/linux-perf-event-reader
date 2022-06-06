@@ -282,26 +282,6 @@ impl RecordType {
     pub const TEXT_POKE: Self = Self(PERF_RECORD_TEXT_POKE);
     pub const AUX_OUTPUT_HW_ID: Self = Self(PERF_RECORD_AUX_OUTPUT_HW_ID);
 
-    // Record types added by the `perf` tool from user space
-    pub const HEADER_ATTR: Self = Self(PERF_RECORD_HEADER_ATTR);
-    pub const HEADER_EVENT_TYPE: Self = Self(PERF_RECORD_HEADER_EVENT_TYPE);
-    pub const HEADER_TRACING_DATA: Self = Self(PERF_RECORD_HEADER_TRACING_DATA);
-    pub const HEADER_BUILD_ID: Self = Self(PERF_RECORD_HEADER_BUILD_ID);
-    pub const FINISHED_ROUND: Self = Self(PERF_RECORD_FINISHED_ROUND);
-    pub const ID_INDEX: Self = Self(PERF_RECORD_ID_INDEX);
-    pub const AUXTRACE_INFO: Self = Self(PERF_RECORD_AUXTRACE_INFO);
-    pub const AUXTRACE: Self = Self(PERF_RECORD_AUXTRACE);
-    pub const AUXTRACE_ERROR: Self = Self(PERF_RECORD_AUXTRACE_ERROR);
-    pub const THREAD_MAP: Self = Self(PERF_RECORD_THREAD_MAP);
-    pub const CPU_MAP: Self = Self(PERF_RECORD_CPU_MAP);
-    pub const STAT_CONFIG: Self = Self(PERF_RECORD_STAT_CONFIG);
-    pub const STAT: Self = Self(PERF_RECORD_STAT);
-    pub const STAT_ROUND: Self = Self(PERF_RECORD_STAT_ROUND);
-    pub const EVENT_UPDATE: Self = Self(PERF_RECORD_EVENT_UPDATE);
-    pub const TIME_CONV: Self = Self(PERF_RECORD_TIME_CONV);
-    pub const HEADER_FEATURE: Self = Self(PERF_RECORD_HEADER_FEATURE);
-    pub const COMPRESSED: Self = Self(PERF_RECORD_COMPRESSED);
-
     pub fn is_builtin_type(&self) -> bool {
         self.0 < PERF_RECORD_USER_TYPE_START
     }
@@ -335,26 +315,11 @@ impl std::fmt::Debug for RecordType {
             Self::CGROUP => "CGROUP",
             Self::TEXT_POKE => "TEXT_POKE",
             Self::AUX_OUTPUT_HW_ID => "AUX_OUTPUT_HW_ID",
-            Self::HEADER_ATTR => "HEADER_ATTR",
-            Self::HEADER_EVENT_TYPE => "HEADER_EVENT_TYPE",
-            Self::HEADER_TRACING_DATA => "HEADER_TRACING_DATA",
-            Self::HEADER_BUILD_ID => "HEADER_BUILD_ID",
-            Self::FINISHED_ROUND => "FINISHED_ROUND",
-            Self::ID_INDEX => "ID_INDEX",
-            Self::AUXTRACE_INFO => "AUXTRACE_INFO",
-            Self::AUXTRACE => "AUXTRACE",
-            Self::AUXTRACE_ERROR => "AUXTRACE_ERROR",
-            Self::THREAD_MAP => "THREAD_MAP",
-            Self::CPU_MAP => "CPU_MAP",
-            Self::STAT_CONFIG => "STAT_CONFIG",
-            Self::STAT => "STAT",
-            Self::STAT_ROUND => "STAT_ROUND",
-            Self::EVENT_UPDATE => "EVENT_UPDATE",
-            Self::TIME_CONV => "TIME_CONV",
-            Self::HEADER_FEATURE => "HEADER_FEATURE",
-            Self::COMPRESSED => "COMPRESSED",
+            other if self.is_builtin_type() => {
+                return fmt.write_fmt(format_args!("Unknown built-in: {}", other.0));
+            }
             other => {
-                return fmt.write_fmt(format_args!("Unknown: {}", other.0));
+                return fmt.write_fmt(format_args!("User type: {}", other.0));
             }
         };
         fmt.write_str(s)

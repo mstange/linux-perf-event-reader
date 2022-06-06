@@ -5,8 +5,8 @@ This crate lets you parse Linux perf events and associated structures.
 ## Example
 
 ```rust
-use linux_perf_event_reader::{PerfEventAttr, RawData, RecordType};
-use linux_perf_event_reader::records::{CommOrExecRecord, ParsedRecord, RawRecord, RecordParseInfo};
+use linux_perf_event_reader::{Endianness, PerfEventAttr, RawData, RecordType};
+use linux_perf_event_reader::records::{CommOrExecRecord, EventRecord, RawEventRecord, RecordParseInfo};
 
 // Read the perf_event_attr data.
 let attr_data = vec![
@@ -19,21 +19,16 @@ let attr_data = vec![
 ];
 let attr =
     PerfEventAttr::parse::<_, byteorder::LittleEndian>(&attr_data[..], None).unwrap();
-let parse_info = RecordParseInfo::from_attr(&attr);
+let parse_info = RecordParseInfo::new(&attr, Endianness::LittleEndian);
 
-let body = vec![
-    108, 71, 8, 0, 108, 71, 8, 0, 100, 117, 109, 112, 95, 115, 121, 109, 115, 0, 0, 0, 0,
-    0, 0, 0, 108, 71, 8, 0, 108, 71, 8, 0, 56, 27, 248, 24, 104, 88, 4, 0,
-];
+let body = b"lG\x08\0lG\x08\0dump_syms\0\0\0\0\0\0\0lG\x08\0lG\x08\08\x1b\xf8\x18hX\x04\0";
 let body_raw_data = RawData::from(&body[..]);
-let raw_record = RawRecord::new(RecordType(3), 0x2000, body_raw_data);
-let parsed_record = raw_record
-    .to_parsed::<byteorder::LittleEndian>(&parse_info)
-    .unwrap();
+let raw_record = RawEventRecord::new(RecordType::COMM, 0x2000, body_raw_data, parse_info);
+let parsed_record = raw_record.parse().unwrap();
 
 assert_eq!(
     parsed_record,
-    ParsedRecord::Comm(CommOrExecRecord {
+    EventRecord::Comm(CommOrExecRecord {
         pid: 542572,
         tid: 542572,
         name: RawData::Single(b"dump_syms"),

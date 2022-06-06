@@ -5,13 +5,11 @@ use crate::{consts::*, Endianness};
 use byteorder::{BigEndian, ByteOrder, LittleEndian};
 use std::fmt;
 
-use super::{
-    get_record_id, get_record_timestamp, CommonData, RecordParseInfo, SampleRecord, ThreadMap,
-};
+use super::{get_record_id, get_record_timestamp, CommonData, RecordParseInfo, SampleRecord};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(clippy::large_enum_variant)]
-pub enum ParsedRecord<'a> {
+pub enum EventRecord<'a> {
     Sample(SampleRecord<'a>),
     Comm(CommOrExecRecord<'a>),
     Exit(ForkOrExitRecord),
@@ -22,8 +20,7 @@ pub enum ParsedRecord<'a> {
     Throttle(ThrottleRecord),
     Unthrottle(ThrottleRecord),
     ContextSwitch(ContextSwitchRecord),
-    ThreadMap(ThreadMap<'a>),
-    Raw(RawRecord<'a>),
+    Raw(RawEventRecord<'a>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -357,14 +354,14 @@ pub enum TaskWasPreempted {
 }
 
 #[derive(Clone, PartialEq, Eq)]
-pub struct RawRecord<'a> {
+pub struct RawEventRecord<'a> {
     pub record_type: RecordType,
     pub misc: u16,
     pub data: RawData<'a>,
     pub parse_info: RecordParseInfo,
 }
 
-impl<'a> RawRecord<'a> {
+impl<'a> RawEventRecord<'a> {
     pub fn new(
         record_type: RecordType,
         misc: u16,
@@ -413,42 +410,40 @@ impl<'a> RawRecord<'a> {
         get_record_id::<T>(self.record_type, self.data, &self.parse_info.id_parse_info)
     }
 
-    pub fn parse(&self) -> Result<ParsedRecord<'a>, std::io::Error> {
+    pub fn parse(&self) -> Result<EventRecord<'a>, std::io::Error> {
         match self.parse_info.endian {
             Endianness::LittleEndian => self.parse_impl::<LittleEndian>(),
             Endianness::BigEndian => self.parse_impl::<BigEndian>(),
         }
     }
 
-    fn parse_impl<T: ByteOrder>(&self) -> Result<ParsedRecord<'a>, std::io::Error> {
+    fn parse_impl<T: ByteOrder>(&self) -> Result<EventRecord<'a>, std::io::Error> {
         let parse_info = &self.parse_info;
         let event = match self.record_type {
             // Kernel built-in record types
-            RecordType::MMAP => ParsedRecord::Mmap(MmapRecord::parse::<T>(self.data, self.misc)?),
-            RecordType::LOST => ParsedRecord::Lost(LostRecord::parse::<T>(self.data)?),
+            RecordType::MMAP => EventRecord::Mmap(MmapRecord::parse::<T>(self.data, self.misc)?),
+            RecordType::LOST => EventRecord::Lost(LostRecord::parse::<T>(self.data)?),
             RecordType::COMM => {
-                ParsedRecord::Comm(CommOrExecRecord::parse::<T>(self.data, self.misc)?)
+                EventRecord::Comm(CommOrExecRecord::parse::<T>(self.data, self.misc)?)
             }
-            RecordType::EXIT => ParsedRecord::Exit(ForkOrExitRecord::parse::<T>(self.data)?),
-            RecordType::THROTTLE => ParsedRecord::Throttle(ThrottleRecord::parse::<T>(self.data)?),
+            RecordType::EXIT => EventRecord::Exit(ForkOrExitRecord::parse::<T>(self.data)?),
+            RecordType::THROTTLE => EventRecord::Throttle(ThrottleRecord::parse::<T>(self.data)?),
             RecordType::UNTHROTTLE => {
-                ParsedRecord::Unthrottle(ThrottleRecord::parse::<T>(self.data)?)
+                EventRecord::Unthrottle(ThrottleRecord::parse::<T>(self.data)?)
             }
-            RecordType::FORK => ParsedRecord::Fork(ForkOrExitRecord::parse::<T>(self.data)?),
+            RecordType::FORK => EventRecord::Fork(ForkOrExitRecord::parse::<T>(self.data)?),
             // READ
             RecordType::SAMPLE => {
-                ParsedRecord::Sample(SampleRecord::parse::<T>(self.data, self.misc, parse_info)?)
+                EventRecord::Sample(SampleRecord::parse::<T>(self.data, self.misc, parse_info)?)
             }
-            RecordType::MMAP2 => {
-                ParsedRecord::Mmap2(Mmap2Record::parse::<T>(self.data, self.misc)?)
-            }
+            RecordType::MMAP2 => EventRecord::Mmap2(Mmap2Record::parse::<T>(self.data, self.misc)?),
             // AUX
             // ITRACE_START
             // LOST_SAMPLES
             RecordType::SWITCH => {
-                ParsedRecord::ContextSwitch(ContextSwitchRecord::from_misc(self.misc))
+                EventRecord::ContextSwitch(ContextSwitchRecord::from_misc(self.misc))
             }
-            RecordType::SWITCH_CPU_WIDE => ParsedRecord::ContextSwitch(
+            RecordType::SWITCH_CPU_WIDE => EventRecord::ContextSwitch(
                 ContextSwitchRecord::parse_cpu_wide::<T>(self.data, self.misc)?,
             ),
             // NAMESPACES
@@ -457,34 +452,13 @@ impl<'a> RawRecord<'a> {
             // CGROUP
             // TEXT_POKE
             // AUX_OUTPUT_HW_ID
-
-            // Record types added by the `perf` tool from user space
-
-            // HEADER_ATTR
-            // HEADER_EVENT_TYPE
-            // HEADER_TRACING_DATA
-            // HEADER_BUILD_ID
-            // FINISHED_ROUND
-            // ID_INDEX
-            // AUXTRACE_INFO
-            // AUXTRACE
-            // AUXTRACE_ERROR
-            RecordType::THREAD_MAP => ParsedRecord::ThreadMap(ThreadMap::parse::<T>(self.data)?),
-            // CPU_MAP
-            // STAT_CONFIG
-            // STAT
-            // STAT_ROUND
-            // EVENT_UPDATE
-            // TIME_CONV
-            // HEADER_FEATURE
-            // COMPRESSED
-            _ => ParsedRecord::Raw(self.clone()),
+            _ => EventRecord::Raw(self.clone()),
         };
         Ok(event)
     }
 }
 
-impl<'a> fmt::Debug for RawRecord<'a> {
+impl<'a> fmt::Debug for RawEventRecord<'a> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         fmt.debug_map()
             .entry(&"record_type", &self.record_type)
