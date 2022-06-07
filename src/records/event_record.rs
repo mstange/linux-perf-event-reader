@@ -7,6 +7,7 @@ use std::fmt;
 
 use super::{get_record_id, get_record_timestamp, CommonData, RecordParseInfo, SampleRecord};
 
+/// A fully parsed event record.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(clippy::large_enum_variant)]
 pub enum EventRecord<'a> {
@@ -353,15 +354,27 @@ pub enum TaskWasPreempted {
     No,
 }
 
+/// An unparsed event record.
+///
+/// This can be converted into a parsed record by calling `.parse()`.
+///
+/// The raw record also provides access to "common data" like the ID, timestamp,
+/// tid etc., i.e. the information that was requested with [`SampleFormat`] and
+/// [`AttrFlags::SAMPLE_ID_ALL`].
 #[derive(Clone, PartialEq, Eq)]
 pub struct RawEventRecord<'a> {
+    /// The record type. Must be a builtin type, i.e. not a user type.
     pub record_type: RecordType,
+    /// The `misc` value on this record.
     pub misc: u16,
+    /// The raw bytes in the body of this record.
     pub data: RawData<'a>,
+    /// The parse info from our corresponding evnt's attr.
     pub parse_info: RecordParseInfo,
 }
 
 impl<'a> RawEventRecord<'a> {
+    /// Create a new `RawEventRecord`. Must only be called if `record_type.is_builtin_type()` is `true`.
     pub fn new(
         record_type: RecordType,
         misc: u16,
@@ -376,6 +389,12 @@ impl<'a> RawEventRecord<'a> {
         }
     }
 
+    /// Parse "common data" on this record, see [`CommonData`].
+    ///
+    /// The available information is determined by the event attr's [`SampleFormat`].
+    /// If this is a sample record, the requested information is definitely available.
+    /// Otherwise, the requested information is only available if [`AttrFlags::SAMPLE_ID_ALL`]
+    /// was set in the attribute flags.
     pub fn common_data(&self) -> Result<CommonData, std::io::Error> {
         if self.record_type.is_user_type() {
             return Ok(Default::default());
@@ -388,6 +407,7 @@ impl<'a> RawEventRecord<'a> {
         }
     }
 
+    /// The record timestamp, if available.
     pub fn timestamp(&self) -> Option<u64> {
         match self.parse_info.endian {
             Endianness::LittleEndian => self.timestamp_impl::<LittleEndian>(),
@@ -395,10 +415,11 @@ impl<'a> RawEventRecord<'a> {
         }
     }
 
-    pub fn timestamp_impl<T: ByteOrder>(&self) -> Option<u64> {
+    fn timestamp_impl<T: ByteOrder>(&self) -> Option<u64> {
         get_record_timestamp::<T>(self.record_type, self.data, &self.parse_info)
     }
 
+    /// The ID, if available.
     pub fn id(&self) -> Option<u64> {
         match self.parse_info.endian {
             Endianness::LittleEndian => self.id_impl::<LittleEndian>(),
@@ -406,10 +427,11 @@ impl<'a> RawEventRecord<'a> {
         }
     }
 
-    pub fn id_impl<T: ByteOrder>(&self) -> Option<u64> {
+    fn id_impl<T: ByteOrder>(&self) -> Option<u64> {
         get_record_id::<T>(self.record_type, self.data, &self.parse_info.id_parse_info)
     }
 
+    /// Parses this raw record into an [`EventRecord`].
     pub fn parse(&self) -> Result<EventRecord<'a>, std::io::Error> {
         match self.parse_info.endian {
             Endianness::LittleEndian => self.parse_impl::<LittleEndian>(),
