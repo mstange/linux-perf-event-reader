@@ -1,3 +1,4 @@
+/// An enum for little or big endian.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Endianness {
     LittleEndian,
