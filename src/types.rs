@@ -1,4 +1,4 @@
-use crate::consts::*;
+use crate::constants::*;
 use bitflags::bitflags;
 
 bitflags! {

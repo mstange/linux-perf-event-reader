@@ -38,7 +38,7 @@
 //! );
 //! # }
 //! ```
-pub mod consts;
+pub mod constants;
 mod endian;
 mod perf_event;
 mod raw_data;

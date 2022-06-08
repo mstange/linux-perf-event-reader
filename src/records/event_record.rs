@@ -1,7 +1,7 @@
 use crate::raw_data::RawData;
 use crate::types::*;
 use crate::utils::HexValue;
-use crate::{consts::*, Endianness};
+use crate::{constants::*, Endianness};
 use byteorder::{BigEndian, ByteOrder, LittleEndian};
 use std::fmt;
 

@@ -1,4 +1,4 @@
-use crate::consts::*;
+use crate::constants::*;
 use crate::types::*;
 use byteorder::{ByteOrder, ReadBytesExt};
 use std::io;
