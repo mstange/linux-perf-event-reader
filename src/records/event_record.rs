@@ -391,10 +391,13 @@ impl<'a> RawEventRecord<'a> {
 
     /// Parse "common data" on this record, see [`CommonData`].
     ///
-    /// The available information is determined by the event attr's [`SampleFormat`].
-    /// If this is a sample record, the requested information is definitely available.
-    /// Otherwise, the requested information is only available if [`AttrFlags::SAMPLE_ID_ALL`]
-    /// was set in the attribute flags.
+    /// The available information is determined by the event attr, specifically
+    /// by the requested [`SampleFormat`] and by the presence of the
+    /// [`AttrFlags::SAMPLE_ID_ALL`] flag: The  [`SampleFormat`] determines the
+    /// available fields, and the `SAMPLE_ID_ALL` flag determines the record
+    /// types on which these fields are available. If `SAMPLE_ID_ALL` is set,
+    /// the requested fields are available on all records, otherwise only on
+    /// sample records ([`RecordType::SAMPLE`]).
     pub fn common_data(&self) -> Result<CommonData, std::io::Error> {
         if self.record_type.is_user_type() {
             return Ok(Default::default());
