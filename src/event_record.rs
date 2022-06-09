@@ -1,11 +1,97 @@
 use crate::raw_data::RawData;
-use crate::types::*;
 use crate::utils::HexValue;
-use crate::{constants::*, Endianness};
+use crate::{
+    constants, CommonData, CpuMode, Endianness, RecordIdParseInfo, RecordParseInfo, RecordType,
+    SampleRecord,
+};
 use byteorder::{BigEndian, ByteOrder, LittleEndian};
 use std::fmt;
 
-use super::{get_record_id, get_record_timestamp, CommonData, RecordParseInfo, SampleRecord};
+/// Get the ID from an event record, if the sample format includes SampleFormat::IDENTIFIER.
+///
+/// This can be used if it is not known which `perf_event_attr` describes this record,
+/// but only if all potential attrs include `PERF_SAMPLE_IDENTIFIER`.
+/// Once the record's ID is known, this ID can be mapped to the right attr,
+/// and then the information from the attr can be used to parse the rest of this record.
+pub fn get_record_identifier<T: ByteOrder>(
+    record_type: RecordType,
+    mut data: RawData,
+    sample_id_all: bool,
+) -> Option<u64> {
+    if record_type.is_user_type() {
+        None
+    } else if record_type == RecordType::SAMPLE {
+        // if IDENTIFIER is set, every SAMPLE record starts with the event ID.
+        data.read_u64::<T>().ok()
+    } else if sample_id_all {
+        // if IDENTIFIER and SAMPLE_ID_ALL are set, every non-SAMPLE record ends with the event ID.
+        let id_offset_from_start = data.len().checked_sub(8)?;
+        data.skip(id_offset_from_start).ok()?;
+        data.read_u64::<T>().ok()
+    } else {
+        None
+    }
+}
+
+/// Get the ID from an event record, with the help of `RecordIdParseInfo`.
+///
+/// This can be used if it is not known which `perf_event_attr` describes this record,
+/// but only if all potential attrs have the same `RecordIdParseInfo`.
+/// Once the record's ID is known, this ID can be mapped to the right attr,
+/// and then the information from the attr can be used to parse the rest of this record.
+pub fn get_record_id<T: ByteOrder>(
+    record_type: RecordType,
+    mut data: RawData,
+    parse_info: &RecordIdParseInfo,
+) -> Option<u64> {
+    if record_type.is_user_type() {
+        return None;
+    }
+
+    if record_type == RecordType::SAMPLE {
+        if let Some(id_offset_from_start) = parse_info.sample_record_id_offset_from_start {
+            data.skip(id_offset_from_start as usize).ok()?;
+            data.read_u64::<T>().ok()
+        } else {
+            None
+        }
+    } else if let Some(id_offset_from_end) = parse_info.nonsample_record_id_offset_from_end {
+        let id_offset_from_start = data.len().checked_sub(id_offset_from_end as usize)?;
+        data.skip(id_offset_from_start).ok()?;
+        data.read_u64::<T>().ok()
+    } else {
+        None
+    }
+}
+
+/// Get the timestamp from an event record, with the help of `RecordParseInfo`.
+///
+/// This can be used for record sorting, without having to wrap the record into
+/// a `RawRecord`.o
+pub fn get_record_timestamp<T: ByteOrder>(
+    record_type: RecordType,
+    mut data: RawData,
+    parse_info: &RecordParseInfo,
+) -> Option<u64> {
+    if record_type.is_user_type() {
+        return None;
+    }
+
+    if record_type == RecordType::SAMPLE {
+        if let Some(time_offset_from_start) = parse_info.sample_record_time_offset_from_start {
+            data.skip(time_offset_from_start as usize).ok()?;
+            data.read_u64::<T>().ok()
+        } else {
+            None
+        }
+    } else if let Some(time_offset_from_end) = parse_info.nonsample_record_time_offset_from_end {
+        let time_offset_from_start = data.len().checked_sub(time_offset_from_end as usize)?;
+        data.skip(time_offset_from_start).ok()?;
+        data.read_u64::<T>().ok()
+    } else {
+        None
+    }
+}
 
 /// A fully parsed event record.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -69,7 +155,7 @@ impl<'a> CommOrExecRecord<'a> {
         let name = cur.read_string().unwrap_or(cur); // TODO: return error if no string terminator found
 
         // TODO: Maybe feature-gate this on 3.16+
-        let is_execve = misc & PERF_RECORD_MISC_COMM_EXEC != 0;
+        let is_execve = misc & constants::PERF_RECORD_MISC_COMM_EXEC != 0;
 
         Ok(Self {
             pid,
@@ -137,7 +223,7 @@ impl<'a> MmapRecord<'a> {
         let length = cur.read_u64::<T>()?;
         let page_offset = cur.read_u64::<T>()?;
         let path = cur.read_string().unwrap_or(cur); // TODO: return error if no string terminator found
-        let is_executable = misc & PERF_RECORD_MISC_MMAP_DATA == 0;
+        let is_executable = misc & constants::PERF_RECORD_MISC_MMAP_DATA == 0;
 
         Ok(MmapRecord {
             pid,
@@ -195,7 +281,7 @@ impl<'a> Mmap2Record<'a> {
         let address = cur.read_u64::<T>()?;
         let length = cur.read_u64::<T>()?;
         let page_offset = cur.read_u64::<T>()?;
-        let file_id = if misc & PERF_RECORD_MISC_MMAP_BUILD_ID != 0 {
+        let file_id = if misc & constants::PERF_RECORD_MISC_MMAP_BUILD_ID != 0 {
             let build_id_len = cur.read_u8()?;
             assert!(build_id_len <= 20);
             let _align = cur.read_u8()?;
@@ -321,9 +407,9 @@ impl ContextSwitchRecord {
     }
 
     pub fn from_misc_pid_tid(misc: u16, pid: Option<i32>, tid: Option<i32>) -> Self {
-        let is_out = misc & PERF_RECORD_MISC_SWITCH_OUT != 0;
+        let is_out = misc & constants::PERF_RECORD_MISC_SWITCH_OUT != 0;
         if is_out {
-            let is_out_preempt = misc & PERF_RECORD_MISC_SWITCH_OUT_PREEMPT != 0;
+            let is_out_preempt = misc & constants::PERF_RECORD_MISC_SWITCH_OUT_PREEMPT != 0;
             ContextSwitchRecord::Out {
                 next_pid: pid,
                 next_tid: tid,
@@ -359,8 +445,8 @@ pub enum TaskWasPreempted {
 /// This can be converted into a parsed record by calling `.parse()`.
 ///
 /// The raw record also provides access to "common data" like the ID, timestamp,
-/// tid etc., i.e. the information that was requested with [`SampleFormat`] and
-/// [`AttrFlags::SAMPLE_ID_ALL`].
+/// tid etc., i.e. the information that was requested with [`SampleFormat`](crate::SampleFormat) and
+/// [`AttrFlags::SAMPLE_ID_ALL`](crate::AttrFlags::SAMPLE_ID_ALL).
 #[derive(Clone, PartialEq, Eq)]
 pub struct RawEventRecord<'a> {
     /// The record type. Must be a builtin type, i.e. not a user type.
@@ -392,12 +478,13 @@ impl<'a> RawEventRecord<'a> {
     /// Parse "common data" on this record, see [`CommonData`].
     ///
     /// The available information is determined by the event attr, specifically
-    /// by the requested [`SampleFormat`] and by the presence of the
-    /// [`AttrFlags::SAMPLE_ID_ALL`] flag: The  [`SampleFormat`] determines the
-    /// available fields, and the `SAMPLE_ID_ALL` flag determines the record
-    /// types on which these fields are available. If `SAMPLE_ID_ALL` is set,
-    /// the requested fields are available on all records, otherwise only on
-    /// sample records ([`RecordType::SAMPLE`]).
+    /// by the requested [`SampleFormat`](crate::SampleFormat) and by the
+    /// presence of the [`AttrFlags::SAMPLE_ID_ALL`](crate::AttrFlags::SAMPLE_ID_ALL)
+    /// flag: The `SampleFormat` determines the available fields, and the
+    /// `SAMPLE_ID_ALL` flag determines the record types on which these fields
+    /// are available. If `SAMPLE_ID_ALL` is set, the requested fields are
+    /// available on all records, otherwise only on sample records
+    /// ([`RecordType::SAMPLE`]).
     pub fn common_data(&self) -> Result<CommonData, std::io::Error> {
         if self.record_type.is_user_type() {
             return Ok(Default::default());

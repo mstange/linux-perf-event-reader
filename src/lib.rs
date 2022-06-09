@@ -5,8 +5,10 @@
 //! ## Example
 //!
 //! ```rust
-//! use linux_perf_event_reader::{Endianness, PerfEventAttr, RawData, RecordType};
-//! use linux_perf_event_reader::records::{CommOrExecRecord, EventRecord, RawEventRecord, RecordParseInfo};
+//! use linux_perf_event_reader::{
+//!     CommOrExecRecord, Endianness, EventRecord, PerfEventAttr, RawData, RawEventRecord,
+//!     RecordParseInfo, RecordType
+//! };
 //!
 //! # fn it_works() {
 //! // Read the perf_event_attr data.
@@ -38,24 +40,33 @@
 //! );
 //! # }
 //! ```
+mod common_data;
 pub mod constants;
 mod endian;
+mod event_record;
+mod parse_info;
 mod perf_event;
 mod raw_data;
-pub mod records;
+mod registers;
+mod sample;
 mod types;
 mod utils;
 
+pub use common_data::*;
 pub use endian::*;
+pub use event_record::*;
+pub use parse_info::*;
 pub use perf_event::*;
 pub use raw_data::*;
+pub use registers::*;
+pub use sample::*;
 pub use types::*;
 
 #[cfg(test)]
 mod test {
     use crate::{
-        records::{CommOrExecRecord, EventRecord, RawEventRecord, RecordParseInfo},
-        Endianness, PerfEventAttr, RawData, RecordType,
+        CommOrExecRecord, Endianness, EventRecord, PerfEventAttr, RawData, RawEventRecord,
+        RecordParseInfo, RecordType,
     };
 
     #[test]
