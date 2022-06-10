@@ -380,6 +380,7 @@ impl PerfEventType {
 }
 
 #[derive(Debug, Clone, Copy)]
+#[non_exhaustive]
 pub enum HardwareEventId {
     /// `PERF_COUNT_HW_CPU_CYCLES`
     CpuCycles,
@@ -423,6 +424,7 @@ impl HardwareEventId {
 }
 
 #[derive(Debug, Clone, Copy)]
+#[non_exhaustive]
 pub enum SoftwareCounterType {
     /// `PERF_COUNT_SW_CPU_CLOCK`
     CpuClock,
@@ -472,6 +474,7 @@ impl SoftwareCounterType {
 }
 
 #[derive(Debug, Clone, Copy)]
+#[non_exhaustive]
 pub enum HardwareCacheId {
     /// `PERF_COUNT_HW_CACHE_L1D`
     L1d,

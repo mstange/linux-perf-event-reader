@@ -96,6 +96,7 @@ pub fn get_record_timestamp<T: ByteOrder>(
 /// A fully parsed event record.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(clippy::large_enum_variant)]
+#[non_exhaustive]
 pub enum EventRecord<'a> {
     Sample(SampleRecord<'a>),
     Comm(CommOrExecRecord<'a>),

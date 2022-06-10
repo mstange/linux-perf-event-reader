@@ -224,6 +224,7 @@ impl AttrFlags {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
 pub enum ClockId {
     Realtime,
     Monotonic,
@@ -327,6 +328,7 @@ impl std::fmt::Debug for RecordType {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum CpuMode {
     Unknown,
     Kernel,
