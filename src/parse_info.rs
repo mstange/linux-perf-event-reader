@@ -8,7 +8,9 @@ pub struct RecordParseInfo {
     pub read_format: ReadFormat,
     pub common_data_offset_from_end: Option<u8>, // 0..=48
     pub sample_regs_user: u64,
-    pub regs_count: u8, // 0..=64
+    pub user_regs_count: u8, // 0..=64
+    pub sample_regs_intr: u64,
+    pub intr_regs_count: u8, // 0..=64
     pub id_parse_info: RecordIdParseInfo,
     pub nonsample_record_time_offset_from_end: Option<u8>, // 0..=40
     pub sample_record_time_offset_from_start: Option<u8>,  // 0..=32
@@ -53,7 +55,9 @@ impl RecordParseInfo {
             None
         };
         let sample_regs_user = attr.sample_regs_user;
-        let regs_count = sample_regs_user.count_ones() as u8;
+        let user_regs_count = sample_regs_user.count_ones() as u8;
+        let sample_regs_intr = attr.sample_regs_intr;
+        let intr_regs_count = sample_regs_intr.count_ones() as u8;
         let nonsample_record_time_offset_from_end = if attr.flags.contains(AttrFlags::SAMPLE_ID_ALL)
             && sample_format.contains(SampleFormat::TIME)
         {
@@ -99,7 +103,9 @@ impl RecordParseInfo {
             read_format,
             common_data_offset_from_end,
             sample_regs_user,
-            regs_count,
+            user_regs_count,
+            sample_regs_intr,
+            intr_regs_count,
             nonsample_record_time_offset_from_end,
             sample_record_time_offset_from_start,
             id_parse_info: RecordIdParseInfo::new(attr),

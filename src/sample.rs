@@ -22,6 +22,7 @@ pub struct SampleRecord<'a> {
     pub phys_addr: Option<u64>,
     pub data_page_size: Option<u64>,
     pub code_page_size: Option<u64>,
+    pub intr_regs: Option<Regs<'a>>,
     pub cpu_mode: CpuMode,
 }
 
@@ -34,8 +35,10 @@ impl<'a> SampleRecord<'a> {
         let sample_format = parse_info.sample_format;
         let branch_sample_format = parse_info.branch_sample_format;
         let read_format = parse_info.read_format;
-        let regs_count = parse_info.regs_count;
         let sample_regs_user = parse_info.sample_regs_user;
+        let user_regs_count = parse_info.user_regs_count;
+        let sample_regs_intr = parse_info.sample_regs_intr;
+        let intr_regs_count = parse_info.intr_regs_count;
         let cpu_mode = CpuMode::from_misc(misc);
         let mut cur = data;
 
@@ -162,7 +165,7 @@ impl<'a> SampleRecord<'a> {
                 None
             } else {
                 let regs_data =
-                    cur.split_off_prefix(regs_count as usize * std::mem::size_of::<u64>())?;
+                    cur.split_off_prefix(user_regs_count as usize * std::mem::size_of::<u64>())?;
                 let raw_regs = RawDataU64::from_raw_data::<T>(regs_data);
                 let user_regs = Regs::new(sample_regs_user, raw_regs);
                 Some(user_regs)
@@ -197,12 +200,20 @@ impl<'a> SampleRecord<'a> {
             let _transaction = cur.read_u64::<T>()?;
         }
 
-        if sample_format.contains(SampleFormat::REGS_INTR) {
+        let intr_regs = if sample_format.contains(SampleFormat::REGS_INTR) {
             let regs_abi = cur.read_u64::<T>()?;
-            if regs_abi != 0 {
-                cur.skip(regs_count as usize * std::mem::size_of::<u64>())?;
+            if regs_abi == 0 {
+                None
+            } else {
+                let regs_data =
+                    cur.split_off_prefix(intr_regs_count as usize * std::mem::size_of::<u64>())?;
+                let raw_regs = RawDataU64::from_raw_data::<T>(regs_data);
+                let intr_regs = Regs::new(sample_regs_intr, raw_regs);
+                Some(intr_regs)
             }
-        }
+        } else {
+            None
+        };
 
         let phys_addr = if sample_format.contains(SampleFormat::PHYS_ADDR) {
             Some(cur.read_u64::<T>()?)
@@ -241,6 +252,7 @@ impl<'a> SampleRecord<'a> {
             pid,
             tid,
             period,
+            intr_regs,
             phys_addr,
             data_page_size,
             code_page_size,
