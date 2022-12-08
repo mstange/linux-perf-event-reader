@@ -15,7 +15,6 @@ use std::{fmt, mem};
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum RawData<'a> {
     Single(&'a [u8]),
-    #[allow(unused)]
     Split(&'a [u8], &'a [u8]),
 }
 
@@ -65,20 +64,21 @@ impl<'a> RawData<'a> {
                 RawData::Single(&single[buf_len..])
             }
             RawData::Split(left, right) => {
-                if buf_len <= left.len() {
+                let left_len = left.len();
+                if buf_len <= left_len {
                     buf.copy_from_slice(&left[..buf_len]);
-                    if buf_len < left.len() {
+                    if buf_len < left_len {
                         RawData::Split(&left[buf_len..], right)
                     } else {
                         RawData::Single(right)
                     }
                 } else {
-                    let remainder_len = buf_len - left.len();
+                    let remainder_len = buf_len - left_len;
                     if remainder_len > right.len() {
                         return Err(std::io::ErrorKind::UnexpectedEof.into());
                     }
-                    buf.copy_from_slice(left);
-                    buf.copy_from_slice(&right[..remainder_len]);
+                    buf[..left_len].copy_from_slice(left);
+                    buf[left_len..].copy_from_slice(&right[..remainder_len]);
                     RawData::Single(&right[remainder_len..])
                 }
             }
@@ -321,5 +321,20 @@ impl<'a> std::fmt::Debug for RawDataU64<'a> {
         }
 
         list.finish()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::RawData;
+
+    #[test]
+    fn test_reading_from_split() {
+        let full = b"CDEF===AB"; // 0123___78"
+        assert_eq!(full.len(), 9);
+        let mut split = RawData::Split(&full[7..9], &full[0..4]);
+        let mut dest = vec![0; 6];
+        split.read_exact(&mut dest).unwrap();
+        assert_eq!(&dest, b"ABCDEF");
     }
 }
