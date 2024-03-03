@@ -13,7 +13,7 @@ repository = "https://github.com/mstange/linux-perf-event-reader/"
 exclude = ["/.github", "/.vscode", "/tests"]
 
 [dependencies]
-bitflags = "1.3.2"
+bitflags = "2"
 byteorder = "1.4.3"
 memchr = "2.4.1"
 thiserror = "1.0.30"

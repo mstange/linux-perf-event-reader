@@ -2,6 +2,7 @@ use crate::constants::*;
 use bitflags::bitflags;
 
 bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct SampleFormat: u64 {
         const IP = PERF_SAMPLE_IP;
         const TID = PERF_SAMPLE_TID;
@@ -30,6 +31,7 @@ bitflags! {
         const WEIGHT_STRUCT = PERF_SAMPLE_WEIGHT_STRUCT;
     }
 
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct BranchSampleFormat: u64 {
         /// user branches
         const USER = PERF_SAMPLE_BRANCH_USER;
@@ -69,6 +71,7 @@ bitflags! {
         const HW_INDEX = PERF_SAMPLE_BRANCH_HW_INDEX;
     }
 
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct AttrFlags: u64 {
         /// off by default
         const DISABLED = ATTR_FLAG_BIT_DISABLED;
@@ -150,6 +153,7 @@ bitflags! {
         const SIGTRAP = ATTR_FLAG_BIT_SIGTRAP;
     }
 
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct HwBreakpointType: u32 {
         /// No breakpoint. (`HW_BREAKPOINT_EMPTY`)
         const EMPTY = 0;
@@ -158,12 +162,12 @@ bitflags! {
         /// Count when we write the memory location. (`HW_BREAKPOINT_W`)
         const W = 2;
         /// Count when we read or write the memory location. (`HW_BREAKPOINT_RW`)
-        const RW = Self::R.bits | Self::W.bits;
+        const RW = Self::R.bits() | Self::W.bits();
         /// Count when we execute code at the memory location. (`HW_BREAKPOINT_X`)
         const X = 4;
         /// The combination of `HW_BREAKPOINT_R` or `HW_BREAKPOINT_W` with
         //// `HW_BREAKPOINT_X` is not allowed. (`HW_BREAKPOINT_INVALID`)
-        const INVALID = Self::RW.bits | Self::X.bits;
+        const INVALID = Self::RW.bits() | Self::X.bits();
     }
 
     /// The format of the data returned by read() on a perf event fd,
@@ -186,6 +190,7 @@ bitflags! {
     /// 	} && PERF_FORMAT_GROUP
     /// };
     /// ```
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct ReadFormat: u64 {
         const TOTAL_TIME_ENABLED = PERF_FORMAT_TOTAL_TIME_ENABLED;
         const TOTAL_TIME_RUNNING = PERF_FORMAT_TOTAL_TIME_RUNNING;
@@ -213,7 +218,7 @@ pub enum IpSkidConstraint {
 impl AttrFlags {
     /// Extract the IpSkidConstraint from the bits.
     pub fn ip_skid_constraint(&self) -> IpSkidConstraint {
-        match (self.bits & Self::PRECISE_IP_BITMASK.bits) >> 15 {
+        match (self.bits() & Self::PRECISE_IP_BITMASK.bits()) >> 15 {
             0 => IpSkidConstraint::ArbitrarySkid,
             1 => IpSkidConstraint::ConstantSkid,
             2 => IpSkidConstraint::ZeroSkid,
