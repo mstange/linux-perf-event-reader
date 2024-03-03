@@ -85,15 +85,14 @@ pub struct PerfEventAttr {
 }
 
 impl PerfEventAttr {
-    pub fn parse<R: Read, T: ByteOrder>(
-        mut reader: R,
-        size: Option<u32>,
-    ) -> Result<Self, std::io::Error> {
+    /// Parse from a reader. On success, this returns the parsed attribute and
+    /// the number of bytes that were read from the reader. This matches the self-reported
+    /// size in the attribute.
+    pub fn parse<R: Read, T: ByteOrder>(mut reader: R) -> Result<(Self, u64), std::io::Error> {
         let type_ = reader.read_u32::<T>()?;
-        let self_described_size = reader.read_u32::<T>()?;
+        let size = reader.read_u32::<T>()?;
         let config = reader.read_u64::<T>()?;
 
-        let size = size.unwrap_or(self_described_size);
         if size < PERF_ATTR_SIZE_VER0 {
             return Err(io::ErrorKind::InvalidInput.into());
         }
@@ -205,7 +204,7 @@ impl PerfEventAttr {
             PerfClock::Default
         };
 
-        Ok(Self {
+        let attr = Self {
             type_,
             sampling_policy,
             sample_format: SampleFormat::from_bits_truncate(sample_type),
@@ -221,7 +220,9 @@ impl PerfEventAttr {
             sample_max_stack,
             aux_sample_size,
             sig_data,
-        })
+        };
+
+        Ok((attr, size.into()))
     }
 }
 
