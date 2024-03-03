@@ -9,7 +9,7 @@ use linux_perf_event_reader::{Endianness, PerfEventAttr, RawData, RecordType};
 use linux_perf_event_reader::records::{CommOrExecRecord, EventRecord, RawEventRecord, RecordParseInfo};
 
 // Read the perf_event_attr data.
-let attr_data = vec![
+let attr_data = [
     0, 0, 0, 0, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 229, 3, 0, 0, 0, 0, 0, 0, 47, 177, 0,
     0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 3, 183, 215, 97, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 15,
