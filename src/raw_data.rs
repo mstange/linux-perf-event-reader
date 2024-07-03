@@ -33,15 +33,50 @@ impl<'a> From<&'a [u8]> for RawData<'a> {
     }
 }
 
+/// A helper which prints out byte slices but limits the output to 20 elements.
+struct DisplayableSlice<'a>(&'a [u8]);
+
+impl<'a> fmt::Display for DisplayableSlice<'a> {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        let len = self.0.len();
+        if len == 0 {
+            return fmt.write_str("[]");
+        }
+
+        const MAX_PRINT_COUNT: usize = 20;
+        let need_ellipsis = len > MAX_PRINT_COUNT;
+        let print_count = len.min(MAX_PRINT_COUNT);
+        let last_printed_index = print_count - 1;
+
+        fmt.write_str("[")?;
+        for b in self.0.iter().take(last_printed_index) {
+            write!(fmt, "{b}, ")?;
+        }
+        write!(fmt, "{}", self.0[last_printed_index])?;
+        if need_ellipsis {
+            write!(
+                fmt,
+                ", ... (and {} more, total length {})",
+                len - MAX_PRINT_COUNT,
+                len
+            )?;
+        }
+        fmt.write_str("]")?;
+        Ok(())
+    }
+}
+
 impl<'a> fmt::Debug for RawData<'a> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match *self {
-            RawData::Single(buffer) => write!(fmt, "RawData::Single( [u8; {}] )", buffer.len()),
+            RawData::Single(buffer) => {
+                write!(fmt, "RawData::Single({})", &DisplayableSlice(buffer))
+            }
             RawData::Split(left, right) => write!(
                 fmt,
-                "RawData::Split( [u8; {}], [u8; {}] )",
-                left.len(),
-                right.len()
+                "RawData::Split({}, {})",
+                &DisplayableSlice(left),
+                &DisplayableSlice(right),
             ),
         }
     }
