@@ -16,4 +16,4 @@ exclude = ["/.github", "/.vscode", "/tests"]
 bitflags = "2"
 byteorder = "1.4.3"
 memchr = "2.4.1"
-thiserror = "1.0.30"
+thiserror = "2"
