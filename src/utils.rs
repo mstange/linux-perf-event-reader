@@ -8,7 +8,7 @@ impl fmt::Debug for HexValue {
 }
 
 pub struct HexSlice<'a>(pub &'a [u64]);
-impl<'a> fmt::Debug for HexSlice<'a> {
+impl fmt::Debug for HexSlice<'_> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         fmt.debug_list()
             .entries(self.0.iter().map(|&value| HexValue(value)))

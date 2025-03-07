@@ -167,7 +167,7 @@ impl<'a> CommOrExecRecord<'a> {
     }
 }
 
-impl<'a> fmt::Debug for CommOrExecRecord<'a> {
+impl fmt::Debug for CommOrExecRecord<'_> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         use std::str;
 
@@ -239,7 +239,7 @@ impl<'a> MmapRecord<'a> {
     }
 }
 
-impl<'a> fmt::Debug for MmapRecord<'a> {
+impl fmt::Debug for MmapRecord<'_> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         fmt.debug_map()
             .entry(&"pid", &self.pid)
@@ -321,7 +321,7 @@ impl<'a> Mmap2Record<'a> {
     }
 }
 
-impl<'a> fmt::Debug for Mmap2Record<'a> {
+impl fmt::Debug for Mmap2Record<'_> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         fmt.debug_map()
             .entry(&"pid", &self.pid)
@@ -571,7 +571,7 @@ impl<'a> RawEventRecord<'a> {
     }
 }
 
-impl<'a> fmt::Debug for RawEventRecord<'a> {
+impl fmt::Debug for RawEventRecord<'_> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         fmt.debug_map()
             .entry(&"record_type", &self.record_type)

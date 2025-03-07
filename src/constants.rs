@@ -1,4 +1,4 @@
-/// Constants from perf_event.h
+// Constants from perf_event.h
 
 /// A hardware perf event.
 ///
@@ -169,7 +169,7 @@ pub const ATTR_FLAG_BIT_WATERMARK: u64 = 1 << 14;
 /// > perf can use precise sampling by adding a :p modifier to the PMC event
 /// > name, eg, "-e instructions:p". The more p's, the more accurate.
 ///
-pub const ATTR_FLAG_BITMASK_PRECISE_IP: u64 = 1 << 15 | 1 << 16;
+pub const ATTR_FLAG_BITMASK_PRECISE_IP: u64 = (1 << 15) | (1 << 16);
 /// non-exec mmap data
 pub const ATTR_FLAG_BIT_MMAP_DATA: u64 = 1 << 17;
 /// sample_type all events

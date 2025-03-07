@@ -36,7 +36,7 @@ impl<'a> From<&'a [u8]> for RawData<'a> {
 /// A helper which prints out byte slices but limits the output to 20 elements.
 struct DisplayableSlice<'a>(&'a [u8]);
 
-impl<'a> fmt::Display for DisplayableSlice<'a> {
+impl fmt::Display for DisplayableSlice<'_> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         let len = self.0.len();
         if len == 0 {
@@ -66,7 +66,7 @@ impl<'a> fmt::Display for DisplayableSlice<'a> {
     }
 }
 
-impl<'a> fmt::Debug for RawData<'a> {
+impl fmt::Debug for RawData<'_> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match *self {
             RawData::Single(buffer) => {
@@ -342,7 +342,7 @@ impl<'a> RawDataU64<'a> {
     }
 }
 
-impl<'a> std::fmt::Debug for RawDataU64<'a> {
+impl std::fmt::Debug for RawDataU64<'_> {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
         let mut list = fmt.debug_list();
         let mut data = self.raw_data;
